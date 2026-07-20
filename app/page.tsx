@@ -316,6 +316,7 @@ export default function Home() {
 
         const payload = new Uint8Array(64);
         payload.set(packetBytes(original).slice(0, 50));
+        payload[0] = 0xfd;
         payload[9] = 1;
         payload[10] = next.modifier;
         payload[11] = next.keyCode;
