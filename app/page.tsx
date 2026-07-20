@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 
 const SIKAI_VENDOR_ID = 0x514c;
 const SIKAI_PRODUCT_ID = 0x8851;
+const CONFIG_USAGE_PAGE = 0xff00;
+const CONFIG_USAGE = 0x0001;
 
 type HidReportInfo = {
   reportId?: number;
@@ -38,7 +40,12 @@ type KeypadDevice = {
 type HidNavigator = Navigator & {
   hid?: {
     requestDevice: (options: {
-      filters: Array<{ vendorId: number; productId: number }>;
+      filters: Array<{
+        vendorId: number;
+        productId: number;
+        usagePage?: number;
+        usage?: number;
+      }>;
     }) => Promise<KeypadDevice[]>;
     addEventListener: (
       type: "disconnect",
@@ -98,11 +105,16 @@ export default function Home() {
     }
 
     setStatus("connecting");
-    setMessage("Choose the USB Keyboard with vendor ID 514C in the browser prompt.");
+    setMessage("Choose the SIKAI USB Keyboard shown in the browser prompt.");
 
     try {
       const devices = await hid.requestDevice({
-        filters: [{ vendorId: SIKAI_VENDOR_ID, productId: SIKAI_PRODUCT_ID }],
+        filters: [{
+          vendorId: SIKAI_VENDOR_ID,
+          productId: SIKAI_PRODUCT_ID,
+          usagePage: CONFIG_USAGE_PAGE,
+          usage: CONFIG_USAGE,
+        }],
       });
 
       if (!devices.length) {
@@ -149,11 +161,11 @@ export default function Home() {
 
       <section className="hero" id="top">
         <div className="intro">
-          <p className="eyebrow">SIKAI · 2-KEY RGB MACROPAD</p>
+          <p className="eyebrow">SIKAI · VENDOR CONFIGURATION CHANNEL</p>
           <h1>Let&apos;s identify your <em>keypad.</em></h1>
           <p className="lede">
-            This first check reads the keypad&apos;s USB capabilities. It does not assign keys,
-            change lighting, install drivers, or write anything to the device.
+            This check now targets the keypad&apos;s dedicated vendor interface, not its normal
+            keyboard interface. It does not assign keys, change lighting, or write to the device.
           </p>
 
           <div className={`statusPanel ${status}`} aria-live="polite">
@@ -178,7 +190,7 @@ export default function Home() {
           <div className="identityStrip" aria-label="Expected device identity">
             <span><small>VENDOR</small><b>0x514C</b></span>
             <span><small>PRODUCT</small><b>0x8851</b></span>
-            <span><small>CONNECTION</small><b>USB HID</b></span>
+            <span><small>USAGE</small><b>FF00 / 0001</b></span>
           </div>
         </div>
 
