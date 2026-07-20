@@ -170,7 +170,6 @@ export default function Home() {
   const [assignments, setAssignments] = useState<KeyAssignment[]>([{ modifier: 0x01, keyCode: 0x06 }, { modifier: 0x01, keyCode: 0x19 }]);
   const [writeStatus, setWriteStatus] = useState<"idle" | "writing" | "success" | "error">("idle");
   const [writeMessage, setWriteMessage] = useState("Read the keypad before editing its assignments.");
-  const [writeConfirmed, setWriteConfirmed] = useState(false);
 
   const supported = useMemo(
     () => typeof navigator !== "undefined" && "hid" in navigator,
@@ -238,7 +237,6 @@ export default function Home() {
       setReadStatus("idle");
       setPackets([]);
       setWriteStatus("idle");
-      setWriteConfirmed(false);
       setWriteMessage("Read the keypad before editing its assignments.");
       setReadMessage("Ready to request layer 1. This does not save or change the keypad.");
       setMessage("Configuration channel confirmed. Report ID 3 is available in both directions.");
@@ -255,7 +253,6 @@ export default function Home() {
     setReadStatus("idle");
     setPackets([]);
     setWriteStatus("idle");
-    setWriteConfirmed(false);
     setWriteMessage("Read the keypad before editing its assignments.");
     setReadMessage("Connect the confirmed configuration channel to enable this diagnostic.");
     setStatus("idle");
@@ -280,7 +277,6 @@ export default function Home() {
           return { modifier: record.modifier, keyCode: record.keyCode };
         }));
         setWriteStatus("idle");
-        setWriteConfirmed(false);
         setWriteMessage("Choose a shortcut for either key. Changes are only sent when you press Apply.");
         setReadStatus("success");
         setReadMessage(`Received ${received.length} configuration packet${received.length === 1 ? "" : "s"}. Nothing was saved or changed.`);
@@ -296,13 +292,12 @@ export default function Home() {
 
   function updateAssignment(index: number, patch: Partial<KeyAssignment>) {
     setAssignments((current) => current.map((assignment, assignmentIndex) => assignmentIndex === index ? { ...assignment, ...patch } : assignment));
-    setWriteConfirmed(false);
     setWriteStatus("idle");
-    setWriteMessage("Review the new shortcuts, acknowledge the onboard-memory change, then press Apply.");
+    setWriteMessage("Review the new shortcuts, then press Apply to save and verify them.");
   }
 
   async function applyAssignments() {
-    if (!device?.opened || !assignmentsChanged || !writeConfirmed || writeStatus === "writing") return;
+    if (!device?.opened || !assignmentsChanged || writeStatus === "writing") return;
 
     setWriteStatus("writing");
     setWriteMessage("Writing the changed key records, saving once, then reading them back…");
@@ -338,7 +333,6 @@ export default function Home() {
       });
 
       setPackets(verifiedPackets);
-      setWriteConfirmed(false);
       if (!verified) throw new Error("The keypad did not read back the requested shortcuts. Its previous settings may still be active.");
       setWriteStatus("success");
       setWriteMessage("Saved and verified from the keypad. The new shortcuts are active in onboard memory.");
@@ -499,11 +493,7 @@ export default function Home() {
                     <strong className="shortcutPreview">{[...MODIFIER_OPTIONS.filter(([mask]) => (assignment.modifier & mask) !== 0).map(([, label]) => label), KEY_NAMES[assignment.keyCode]].join(" + ")}</strong>
                   </div>
                 ))}
-                <label className="writeConsent">
-                  <input type="checkbox" checked={writeConfirmed} onChange={(event) => setWriteConfirmed(event.target.checked)} />
-                  <span>I understand Apply changes the keypad&apos;s onboard layer 1 shortcuts.</span>
-                </label>
-                <button className="applyButton" onClick={applyAssignments} disabled={!assignmentsChanged || !writeConfirmed || writeStatus === "writing"}>
+                <button className="applyButton" onClick={applyAssignments} disabled={!assignmentsChanged || writeStatus === "writing"}>
                   {writeStatus === "writing" ? "Applying & verifying…" : assignmentsChanged ? "Apply to keypad" : "No changes to apply"}
                 </button>
                 <p className={`writeStatus ${writeStatus}`} aria-live="polite">{writeMessage}</p>
@@ -511,16 +501,19 @@ export default function Home() {
             )}
           </div>
 
-          <div className="packetViewer" aria-label="Raw configuration packets">
-            <div className="packetHeader"><span>ADVANCED · REPORT 03</span><span>{packets.length} / 24 PACKETS</span></div>
-            {packets.length ? (
-              <ol>
-                {packets.map((packet, index) => <li key={`${index}-${packet}`}><span>{String(index + 1).padStart(2, "0")}</span><code>{packet}</code></li>)}
-              </ol>
-            ) : (
-              <p>Raw response bytes will appear here. They are diagnostic data only.</p>
-            )}
-          </div>
+          <details className="advancedPanel">
+            <summary><span>Advanced</span><small>{packets.length} / 24 RAW PACKETS</small></summary>
+            <div className="packetViewer" aria-label="Raw configuration packets">
+              <div className="packetHeader"><span>REPORT 03</span><span>{packets.length} / 24 PACKETS</span></div>
+              {packets.length ? (
+                <ol>
+                  {packets.map((packet, index) => <li key={`${index}-${packet}`}><span>{String(index + 1).padStart(2, "0")}</span><code>{packet}</code></li>)}
+                </ol>
+              ) : (
+                <p>Raw response bytes will appear here. They are diagnostic data only.</p>
+              )}
+            </div>
+          </details>
         </article>
       </section>
 
