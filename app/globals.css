@@ -105,6 +105,26 @@ dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fon
 .collectionCard p { color: #aaa8ae; font-size: 12px; margin: 5px 0 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .collectionCard ul { list-style: none; display: flex; gap: 22px; padding: 0; margin: 0; font-size: 11px; color: #aaa8ae; }
 .collectionCard li b { color: #f6f2eb; margin-left: 5px; }
+.diagnosticCard { margin-top: 30px; border: 1px solid #ffffff25; background: #ffffff08; display: grid; grid-template-columns: minmax(280px,.8fr) minmax(0,1.2fr); }
+.diagnosticCopy { padding: 30px; border-right: 1px solid #ffffff25; }
+.diagnosticCopy .eyebrow { color: var(--acid); margin-bottom: 12px; }
+.diagnosticCopy h3 { margin: 0; font-size: 30px; letter-spacing: -.04em; }
+.diagnosticCopy > p:not(.eyebrow):not(.diagnosticStatus) { color: #aaa8ae; font-size: 13px; line-height: 1.6; max-width: 520px; }
+.diagnosticActions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+.acidButton, .darkButton { min-height: 46px; padding: 0 18px; font-weight: 800; border: 1px solid var(--acid); }
+.acidButton { background: var(--acid); color: var(--ink); }
+.darkButton { background: transparent; color: #f6f2eb; }
+.acidButton:disabled { opacity: .42; cursor: default; }
+.diagnosticStatus { min-height: 38px; color: #d1cfd4; font-size: 12px; line-height: 1.5; margin: 16px 0 0; }
+.diagnosticCard.success .diagnosticStatus { color: var(--acid); }
+.diagnosticCard.error .diagnosticStatus { color: #ff9c96; }
+.packetViewer { min-width: 0; padding: 22px; background: #0e0e12; }
+.packetHeader { display: flex; justify-content: space-between; color: var(--acid); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .12em; padding-bottom: 14px; border-bottom: 1px solid #ffffff20; }
+.packetViewer > p { color: #777780; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 22px 0; }
+.packetViewer ol { list-style: none; padding: 0; margin: 12px 0 0; max-height: 300px; overflow: auto; }
+.packetViewer li { display: grid; grid-template-columns: 30px minmax(0,1fr); gap: 10px; padding: 7px 0; border-bottom: 1px solid #ffffff0d; }
+.packetViewer li > span { color: var(--acid); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.packetViewer code { color: #c5c3c9; font-size: 10px; white-space: nowrap; overflow-x: auto; }
 footer { max-width: 1280px; margin: auto; min-height: 86px; padding: 0 38px; display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; letter-spacing: .12em; }
 .steps { display: flex; gap: 8px; }
 .steps i { width: 42px; height: 3px; background: var(--line); }
@@ -115,6 +135,8 @@ footer { max-width: 1280px; margin: auto; min-height: 86px; padding: 0 38px; dis
   .deviceStage { height: 430px; }
   .deviceStage::before { width: 380px; height: 380px; }
   .reportGrid { grid-template-columns: 1fr; }
+  .diagnosticCard { grid-template-columns: 1fr; }
+  .diagnosticCopy { border-right: 0; border-bottom: 1px solid #ffffff25; }
 }
 @media (max-width: 600px) {
   .topbar, .hero, footer { padding-left: 20px; padding-right: 20px; }

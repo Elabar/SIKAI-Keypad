@@ -35,6 +35,14 @@ type KeypadDevice = {
   collections: HidCollectionInfo[];
   open: () => Promise<void>;
   close: () => Promise<void>;
+  sendReport: (reportId: number, data: BufferSource) => Promise<void>;
+  addEventListener: (type: "inputreport", listener: (event: HidInputReportEvent) => void) => void;
+  removeEventListener: (type: "inputreport", listener: (event: HidInputReportEvent) => void) => void;
+};
+
+type HidInputReportEvent = Event & {
+  reportId: number;
+  data: DataView;
 };
 
 type HidNavigator = Navigator & {
@@ -75,6 +83,9 @@ export default function Home() {
   const [result, setResult] = useState<ProbeResult | null>(null);
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
   const [message, setMessage] = useState("Ready for a read-only check.");
+  const [readStatus, setReadStatus] = useState<"idle" | "reading" | "success" | "error">("idle");
+  const [packets, setPackets] = useState<string[]>([]);
+  const [readMessage, setReadMessage] = useState("Connect the confirmed configuration channel to enable this diagnostic.");
 
   const supported = useMemo(
     () => typeof navigator !== "undefined" && "hid" in navigator,
@@ -134,7 +145,10 @@ export default function Home() {
         collections: selected.collections ?? [],
       });
       setStatus("connected");
-      setMessage("Keypad detected. Only its public HID description was read.");
+      setReadStatus("idle");
+      setPackets([]);
+      setReadMessage("Ready to request layer 1. This does not save or change the keypad.");
+      setMessage("Configuration channel confirmed. Report ID 3 is available in both directions.");
     } catch (error) {
       const detail = error instanceof Error ? error.message : "The browser could not open the device.";
       setStatus("error");
@@ -145,8 +159,75 @@ export default function Home() {
   async function disconnect() {
     if (device?.opened) await device.close();
     setDevice(null);
+    setReadStatus("idle");
+    setPackets([]);
+    setReadMessage("Connect the confirmed configuration channel to enable this diagnostic.");
     setStatus("idle");
     setMessage("Probe closed. No settings were changed.");
+  }
+
+  async function readLayerOne() {
+    if (!device?.opened || readStatus === "reading") return;
+
+    setReadStatus("reading");
+    setPackets([]);
+    setReadMessage("Listening for configuration packets from layer 1…");
+
+    const received: string[] = [];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let finish: (() => void) | undefined;
+
+    const handleReport = (event: HidInputReportEvent) => {
+      if (event.reportId !== 3) return;
+      const bytes = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
+      received.push(Array.from(bytes, (byte) => byte.toString(16).toUpperCase().padStart(2, "0")).join(" "));
+      setPackets([...received]);
+      if (received.length >= 24) finish?.();
+    };
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        finish = () => {
+          if (settled) return;
+          settled = true;
+          if (timer) clearTimeout(timer);
+          device.removeEventListener("inputreport", handleReport);
+          resolve();
+        };
+
+        device.addEventListener("inputreport", handleReport);
+        timer = setTimeout(finish, 3000);
+
+        const payload = new Uint8Array(64);
+        payload.set([0xfa, 0x0f, 0x03, 0x01]);
+        device.sendReport(3, payload).catch((error) => {
+          if (timer) clearTimeout(timer);
+          device.removeEventListener("inputreport", handleReport);
+          settled = true;
+          reject(error);
+        });
+      });
+
+      setPackets([...received]);
+      if (received.length) {
+        setReadStatus("success");
+        setReadMessage(`Received ${received.length} configuration packet${received.length === 1 ? "" : "s"}. Nothing was saved or changed.`);
+      } else {
+        setReadStatus("error");
+        setReadMessage("The request was sent, but no report ID 3 response arrived. Reconnect the keypad and try once more.");
+      }
+    } catch (error) {
+      setReadStatus("error");
+      setReadMessage(error instanceof Error ? error.message : "The browser could not send the read request.");
+    }
+  }
+
+  async function copyPackets() {
+    if (!packets.length) return;
+    const text = packets.map((packet, index) => `${String(index + 1).padStart(2, "0")}: ${packet}`).join("\n");
+    await navigator.clipboard.writeText(text);
+    setReadMessage(`Copied ${packets.length} raw configuration packet${packets.length === 1 ? "" : "s"}.`);
   }
 
   return (
@@ -156,7 +237,7 @@ export default function Home() {
           <span className="brandMark" aria-hidden="true"><i /><i /></span>
           KEYPAD LAB
         </a>
-        <span className="readOnlyBadge"><span /> READ-ONLY MODE</span>
+          <span className="readOnlyBadge"><span /> SAFE DIAGNOSTIC</span>
       </header>
 
       <section className="hero" id="top">
@@ -164,8 +245,8 @@ export default function Home() {
           <p className="eyebrow">SIKAI · VENDOR CONFIGURATION CHANNEL</p>
           <h1>Let&apos;s identify your <em>keypad.</em></h1>
           <p className="lede">
-            This check now targets the keypad&apos;s dedicated vendor interface, not its normal
-            keyboard interface. It does not assign keys, change lighting, or write to the device.
+            This page targets the keypad&apos;s dedicated vendor interface, not its normal
+            keyboard interface. Nothing runs automatically and no save command is used.
           </p>
 
           <div className={`statusPanel ${status}`} aria-live="polite">
@@ -226,7 +307,7 @@ export default function Home() {
                 <div><dt>Vendor ID</dt><dd>{result.vendorId}</dd></div>
                 <div><dt>Product ID</dt><dd>{result.productId}</dd></div>
                 <div><dt>Collections</dt><dd>{result.collections.length}</dd></div>
-                <div><dt>Access</dt><dd className="safe">READ ONLY</dd></div>
+                <div><dt>Access</dt><dd className="safe">CONFIRMED</dd></div>
               </dl>
             </article>
 
@@ -248,12 +329,41 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        <article className={`diagnosticCard ${readStatus}`}>
+          <div className="diagnosticCopy">
+            <p className="eyebrow">SAFE PROTOCOL TEST</p>
+            <h3>Read layer 1</h3>
+            <p>
+              Sends SIKAI&apos;s non-persistent layer-read request on report ID 3, then listens for
+              the reply for three seconds. It does not assign keys, change RGB, or write to flash.
+            </p>
+            <div className="diagnosticActions">
+              <button className="acidButton" onClick={readLayerOne} disabled={status !== "connected" || readStatus === "reading"}>
+                {readStatus === "reading" ? "Reading…" : "Read layer 1"}
+              </button>
+              {packets.length > 0 && <button className="darkButton" onClick={copyPackets}>Copy raw packets</button>}
+            </div>
+            <p className="diagnosticStatus" aria-live="polite">{readMessage}</p>
+          </div>
+
+          <div className="packetViewer" aria-label="Raw configuration packets">
+            <div className="packetHeader"><span>REPORT 03</span><span>{packets.length} / 24 PACKETS</span></div>
+            {packets.length ? (
+              <ol>
+                {packets.map((packet, index) => <li key={`${index}-${packet}`}><span>{String(index + 1).padStart(2, "0")}</span><code>{packet}</code></li>)}
+              </ol>
+            ) : (
+              <p>Raw response bytes will appear here. They are diagnostic data only.</p>
+            )}
+          </div>
+        </article>
       </section>
 
       <footer>
-        <p>STEP 1 OF 3</p>
-        <div className="steps"><i className="active" /><i /><i /></div>
-        <p>Next: decode the safe configuration protocol</p>
+        <p>STEP 2 OF 3</p>
+        <div className="steps"><i className="active" /><i className="active" /><i /></div>
+        <p>Next: decode the returned key and RGB settings</p>
       </footer>
     </main>
   );
