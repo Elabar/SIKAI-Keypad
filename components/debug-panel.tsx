@@ -1,17 +1,28 @@
-import type { KeypadController } from "@/hooks/use-keypad-controller";
+import { useShallow } from "zustand/react/shallow";
 import { hex } from "@/lib/sikai-keypad";
 import type { HidReportInfo } from "@/lib/sikai-keypad";
+import { useKeypadStore } from "@/stores/keypad-store";
 
 function reportIds(reports: HidReportInfo[] | undefined) {
   if (!reports?.length) return "none";
   return reports.map((report) => report.reportId ?? 0).join(", ");
 }
 
-export function DebugPanel({ controller }: { controller: KeypadController }) {
+export function DebugPanel() {
   const {
-    connected, hardware, packets, profile, profileStatus, profileMessage,
+    connectionStatus, hardware, packets, profile, profileStatus, profileMessage,
     detectFirmware, copyPackets,
-  } = controller;
+  } = useKeypadStore(useShallow((state) => ({
+    connectionStatus: state.connectionStatus,
+    hardware: state.hardware,
+    packets: state.packets,
+    profile: state.profile,
+    profileStatus: state.profileStatus,
+    profileMessage: state.profileMessage,
+    detectFirmware: state.detectFirmware,
+    copyPackets: state.copyPackets,
+  })));
+  const connected = connectionStatus === "connected";
 
   return (
     <details className="debugPanel">

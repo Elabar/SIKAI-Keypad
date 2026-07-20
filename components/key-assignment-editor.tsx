@@ -1,12 +1,26 @@
-import type { KeypadController } from "@/hooks/use-keypad-controller";
+import { useShallow } from "zustand/react/shallow";
 import { KEY_OPTIONS, MODIFIER_OPTIONS, shortcutLabel } from "@/lib/sikai-keypad";
+import { useKeypadStore } from "@/stores/keypad-store";
 
-export function KeyAssignmentEditor({ controller }: { controller: KeypadController }) {
+export function KeyAssignmentEditor() {
   const {
-    connected, currentAssignments, assignments, assignmentsChanged,
+    connectionStatus, currentAssignments, assignments, assignmentsChanged,
     readStatus, readMessage, writeStatus, writeMessage,
     reloadAssignments, updateAssignment, applyAssignments,
-  } = controller;
+  } = useKeypadStore(useShallow((state) => ({
+    connectionStatus: state.connectionStatus,
+    currentAssignments: state.currentAssignments,
+    assignments: state.assignments,
+    assignmentsChanged: state.assignmentsChanged,
+    readStatus: state.readStatus,
+    readMessage: state.readMessage,
+    writeStatus: state.writeStatus,
+    writeMessage: state.writeMessage,
+    reloadAssignments: state.reloadAssignments,
+    updateAssignment: state.updateAssignment,
+    applyAssignments: state.applyAssignments,
+  })));
+  const connected = connectionStatus === "connected";
 
   return (
     <article className={`diagnosticCard ${readStatus}`}>

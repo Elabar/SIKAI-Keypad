@@ -1,4 +1,5 @@
-import type { KeypadController } from "@/hooks/use-keypad-controller";
+import { useShallow } from "zustand/react/shallow";
+import { useKeypadStore } from "@/stores/keypad-store";
 
 function KeypadIllustration() {
   return (
@@ -15,8 +16,15 @@ function KeypadIllustration() {
   );
 }
 
-export function Hero({ controller }: { controller: KeypadController }) {
-  const { connectionStatus, connectionMessage, connected, supported, connect, disconnect } = controller;
+export function Hero() {
+  const { connectionStatus, connectionMessage, supported, connect, disconnect } = useKeypadStore(useShallow((state) => ({
+    connectionStatus: state.connectionStatus,
+    connectionMessage: state.connectionMessage,
+    supported: state.supported,
+    connect: state.connect,
+    disconnect: state.disconnect,
+  })));
+  const connected = connectionStatus === "connected";
   const statusTitle = connected
     ? "SIKAI keypad connected"
     : connectionStatus === "connecting"

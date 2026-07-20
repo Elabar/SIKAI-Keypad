@@ -28,17 +28,20 @@ test("server-renders the keypad configurator", async () => {
 });
 
 test("keeps protocol and presentation concerns separated", async () => {
-  const [page, controller, keypadClass] = await Promise.all([
+  const [page, store, keypadClass] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../hooks/use-keypad-controller.ts", import.meta.url), "utf8"),
+    readFile(new URL("../stores/keypad-store.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/sikai-keypad/sikai-keypad.ts", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /<Hero controller=\{controller\}/);
-  assert.match(page, /<KeyAssignmentEditor controller=\{controller\}/);
-  assert.match(page, /<RgbEditor controller=\{controller\}/);
+  assert.match(page, /<Hero \/>/);
+  assert.match(page, /<KeyAssignmentEditor \/>/);
+  assert.match(page, /<RgbEditor \/>/);
   assert.doesNotMatch(page, /sendReport|requestDevice|inputreport/);
-  assert.match(controller, /useKeypadController/);
+  assert.match(store, /create<KeypadState>/);
+  assert.match(store, /connect:\s*async/);
+  assert.match(store, /applyAssignments:\s*async/);
+  assert.match(store, /applyRgb:\s*async/);
   assert.match(keypadClass, /export class SikaiKeypad/);
   assert.match(keypadClass, /readAssignments/);
   assert.match(keypadClass, /writeAssignments/);

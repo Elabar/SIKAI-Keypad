@@ -1,12 +1,26 @@
 import type { CSSProperties } from "react";
-import type { KeypadController } from "@/hooks/use-keypad-controller";
+import { useShallow } from "zustand/react/shallow";
 import { RGB_COLORS, RGB_MODES } from "@/lib/sikai-keypad";
+import { useKeypadStore } from "@/stores/keypad-store";
 
-export function RgbEditor({ controller }: { controller: KeypadController }) {
+export function RgbEditor() {
   const {
-    connected, profile, rgbColor, rgbMode, rgbStatus, rgbMessage,
+    connectionStatus, profile, rgbColor, rgbMode, rgbStatus, rgbMessage,
     setRgbColor, setRgbMode, applyRgb, previewPressed, pressPreview,
-  } = controller;
+  } = useKeypadStore(useShallow((state) => ({
+    connectionStatus: state.connectionStatus,
+    profile: state.profile,
+    rgbColor: state.rgbColor,
+    rgbMode: state.rgbMode,
+    rgbStatus: state.rgbStatus,
+    rgbMessage: state.rgbMessage,
+    setRgbColor: state.setRgbColor,
+    setRgbMode: state.setRgbMode,
+    applyRgb: state.applyRgb,
+    previewPressed: state.previewPressed,
+    pressPreview: state.pressPreview,
+  })));
+  const connected = connectionStatus === "connected";
   const protocolSupported = profile?.protocol === 0x00 || profile?.protocol === 0x0a;
 
   return (
