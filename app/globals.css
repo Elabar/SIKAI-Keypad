@@ -187,6 +187,9 @@ dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fon
 .rgbStatus { min-height: 32px; color: #aaa8ae; font-size: 11px; line-height: 1.5; margin: 13px 0 0; }
 .rgbStatus.success { color: var(--acid); }
 .rgbStatus.error { color: #ff9c96; }
+.firmwareProfile { margin: 10px 0 18px; padding: 12px; border: 1px solid #ffffff20; background: #111217; color: var(--acid); font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
+.firmwareProfile span { display: block; margin-bottom: 8px; }
+.firmwareProfile code { display: block; overflow-x: auto; color: #aaa8ae; white-space: nowrap; letter-spacing: 0; }
 footer { max-width: 1280px; margin: auto; min-height: 86px; padding: 0 38px; display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; letter-spacing: .12em; }
 .steps { display: flex; gap: 8px; }
 .steps i { width: 42px; height: 3px; background: var(--line); }

@@ -70,6 +70,13 @@ type ProbeResult = {
   collections: HidCollectionInfo[];
 };
 
+type FirmwareProfile = {
+  keyCount: number;
+  addOnCount: number;
+  protocol: number;
+  raw: string;
+};
+
 function hex(value: number | undefined, width = 4) {
   return `0x${(value ?? 0).toString(16).toUpperCase().padStart(width, "0")}`;
 }
@@ -177,6 +184,36 @@ async function requestLayerOne(device: KeypadDevice, onPacket?: (packets: string
   return received;
 }
 
+async function requestFirmwareProfile(device: KeypadDevice) {
+  return new Promise<FirmwareProfile>((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error, profile?: FirmwareProfile) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      device.removeEventListener("inputreport", handleReport);
+      if (error) reject(error);
+      else if (profile) resolve(profile);
+    };
+    const handleReport = (event: HidInputReportEvent) => {
+      if (event.reportId !== 3) return;
+      const bytes = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
+      if (bytes.length < 4) return;
+      finish(undefined, {
+        keyCount: bytes[1],
+        addOnCount: bytes[2],
+        protocol: bytes[3],
+        raw: Array.from(bytes, (byte) => byte.toString(16).toUpperCase().padStart(2, "0")).join(" "),
+      });
+    };
+    const timer = setTimeout(() => finish(new Error("No identity response arrived. Reconnect the keypad and try once more.")), 2000);
+    device.addEventListener("inputreport", handleReport);
+    const payload = new Uint8Array(64);
+    payload.set([0xfb, 0xfb, 0xfb]);
+    device.sendReport(3, payload).catch((error) => finish(error instanceof Error ? error : new Error("The identity request could not be sent.")));
+  });
+}
+
 export default function Home() {
   const [device, setDevice] = useState<KeypadDevice | null>(null);
   const [result, setResult] = useState<ProbeResult | null>(null);
@@ -191,6 +228,9 @@ export default function Home() {
   const [rgbColor, setRgbColor] = useState(0x50);
   const [rgbMode, setRgbMode] = useState(0);
   const [previewPressed, setPreviewPressed] = useState<number | null>(null);
+  const [profileStatus, setProfileStatus] = useState<"idle" | "reading" | "success" | "error">("idle");
+  const [profile, setProfile] = useState<FirmwareProfile | null>(null);
+  const [profileMessage, setProfileMessage] = useState("Run the read-only firmware check to select the correct RGB protocol.");
 
   const supported = useMemo(
     () => typeof navigator !== "undefined" && "hid" in navigator,
@@ -258,6 +298,9 @@ export default function Home() {
       setReadStatus("idle");
       setPackets([]);
       setWriteStatus("idle");
+      setProfileStatus("idle");
+      setProfile(null);
+      setProfileMessage("Run the read-only firmware check to select the correct RGB protocol.");
       setWriteMessage("Read the keypad before editing its assignments.");
       setReadMessage("Ready to request layer 1. This does not save or change the keypad.");
       setMessage("Configuration channel confirmed. Report ID 3 is available in both directions.");
@@ -274,6 +317,9 @@ export default function Home() {
     setReadStatus("idle");
     setPackets([]);
     setWriteStatus("idle");
+    setProfileStatus("idle");
+    setProfile(null);
+    setProfileMessage("Run the read-only firmware check to select the correct RGB protocol.");
     setWriteMessage("Read the keypad before editing its assignments.");
     setReadMessage("Connect the confirmed configuration channel to enable this diagnostic.");
     setStatus("idle");
@@ -368,6 +414,26 @@ export default function Home() {
     const text = packets.map((packet, index) => `${String(index + 1).padStart(2, "0")}: ${packet}`).join("\n");
     await navigator.clipboard.writeText(text);
     setReadMessage(`Copied ${packets.length} raw configuration packet${packets.length === 1 ? "" : "s"}.`);
+  }
+
+  async function detectFirmwareProfile() {
+    if (!device?.opened || profileStatus === "reading") return;
+    setProfileStatus("reading");
+    setProfile(null);
+    setProfileMessage("Reading the keypad's firmware identity. No settings are being changed…");
+    try {
+      const detected = await requestFirmwareProfile(device);
+      setProfile(detected);
+      setProfileStatus("success");
+      setProfileMessage(
+        detected.protocol === 0x0a
+          ? "Protocol 0x0A confirmed: this keypad uses SIKAI's newer three-packet RGB table."
+          : `Protocol ${hex(detected.protocol, 2)} detected. RGB writing remains paused while this variant is matched.`,
+      );
+    } catch (error) {
+      setProfileStatus("error");
+      setProfileMessage(error instanceof Error ? error.message : "The firmware identity could not be read.");
+    }
   }
 
   function pressPreview(key: number) {
@@ -595,6 +661,18 @@ export default function Home() {
               </div>
             </fieldset>
 
+            <div className="diagnosticActions">
+              <button className="darkButton" type="button" onClick={detectFirmwareProfile} disabled={status !== "connected" || profileStatus === "reading"}>
+                {profileStatus === "reading" ? "Detecting…" : profile ? "Check firmware again" : "Detect firmware protocol"}
+              </button>
+            </div>
+            <p className={`rgbStatus ${profileStatus === "error" ? "error" : profileStatus === "success" ? "success" : ""}`} aria-live="polite">{profileMessage}</p>
+            {profile && (
+              <div className="firmwareProfile" aria-label="Firmware identity result">
+                <span>KEYS {profile.keyCount} · ADD-ONS {profile.addOnCount} · PROTOCOL {hex(profile.protocol, 2)}</span>
+                <code>{profile.raw}</code>
+              </div>
+            )}
             <button className="applyRgbButton" type="button" disabled aria-describedby="rgb-write-status">
               RGB hardware write paused
             </button>
