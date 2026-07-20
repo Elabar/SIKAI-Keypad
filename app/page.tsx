@@ -128,20 +128,6 @@ function packetForSlot(source: string[], slot: number) {
   return source.find((packet) => packetBytes(packet)[1] === slot);
 }
 
-async function sendReportWithTimeout(device: KeypadDevice, payload: Uint8Array, timeoutMs = 1500) {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await Promise.race([
-      device.sendReport(3, payload),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("The RGB command timed out. Reconnect the keypad before trying again.")), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 function decodePacket(packet: string) {
   const bytes = packetBytes(packet);
   const modifiers = [
@@ -204,8 +190,6 @@ export default function Home() {
   const [writeMessage, setWriteMessage] = useState("Read the keypad before editing its assignments.");
   const [rgbColor, setRgbColor] = useState(0x50);
   const [rgbMode, setRgbMode] = useState(0);
-  const [rgbStatus, setRgbStatus] = useState<"idle" | "writing" | "success" | "error">("idle");
-  const [rgbMessage, setRgbMessage] = useState("Choose a color and firmware mode, then apply it to the keypad.");
   const [previewPressed, setPreviewPressed] = useState<number | null>(null);
 
   const supported = useMemo(
@@ -384,32 +368,6 @@ export default function Home() {
     const text = packets.map((packet, index) => `${String(index + 1).padStart(2, "0")}: ${packet}`).join("\n");
     await navigator.clipboard.writeText(text);
     setReadMessage(`Copied ${packets.length} raw configuration packet${packets.length === 1 ? "" : "s"}.`);
-  }
-
-  async function applyRgb() {
-    if (!device?.opened || rgbStatus === "writing") return;
-    setRgbStatus("writing");
-    setRgbMessage("Saving the lighting color and mode…");
-
-    try {
-      const payload = new Uint8Array(64);
-      payload[0] = 0xfe;
-      payload[1] = 0xb0;
-      payload[2] = 0x01;
-      payload[3] = 0x01;
-      payload[9] = 0x01;
-      payload[11] = rgbColor | rgbMode;
-      await sendReportWithTimeout(device, payload);
-      await new Promise((resolve) => setTimeout(resolve, 200));
-
-      const color = RGB_COLORS.find((option) => option.value === rgbColor)?.name ?? "selected";
-      const mode = RGB_MODES.find((option) => option.value === rgbMode)?.name ?? `Mode ${rgbMode}`;
-      setRgbStatus("success");
-      setRgbMessage(`${color}, ${mode} was sent. Confirm the visible effect and whether it remains after reconnecting.`);
-    } catch (error) {
-      setRgbStatus("error");
-      setRgbMessage(error instanceof Error ? error.message : "The keypad could not save the RGB setting.");
-    }
   }
 
   function pressPreview(key: number) {
@@ -612,7 +570,7 @@ export default function Home() {
                   <button
                     type="button"
                     className={rgbColor === option.value ? "selected" : ""}
-                    onClick={() => { setRgbColor(option.value); setRgbStatus("idle"); }}
+                    onClick={() => setRgbColor(option.value)}
                     key={option.value}
                     aria-pressed={rgbColor === option.value}
                   >
@@ -629,7 +587,7 @@ export default function Home() {
                   <button
                     type="button"
                     className={rgbMode === mode.value ? "selected" : ""}
-                    onClick={() => { setRgbMode(mode.value); setRgbStatus("idle"); }}
+                    onClick={() => setRgbMode(mode.value)}
                     key={mode.value}
                     aria-pressed={rgbMode === mode.value}
                   ><span>{mode.name}</span><small>MODE {mode.value} · {mode.detail}</small></button>
@@ -637,10 +595,12 @@ export default function Home() {
               </div>
             </fieldset>
 
-            <button className="applyRgbButton" onClick={applyRgb} disabled={status !== "connected" || rgbStatus === "writing"}>
-              {rgbStatus === "writing" ? "Applying RGB…" : "Apply RGB to keypad"}
+            <button className="applyRgbButton" type="button" disabled aria-describedby="rgb-write-status">
+              RGB hardware write paused
             </button>
-            <p className={`rgbStatus ${rgbStatus}`} aria-live="polite">{rgbMessage}</p>
+            <p className="rgbStatus error" id="rgb-write-status" role="status">
+              This firmware stalls on the vendor RGB packet we tested. No lighting command will be sent until its model-specific save sequence is verified. Shortcut configuration remains available.
+            </p>
           </div>
         </article>
       </section>
