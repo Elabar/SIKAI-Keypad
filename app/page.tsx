@@ -99,6 +99,16 @@ const MODIFIER_OPTIONS = [
   [0x01, "Ctrl"], [0x02, "Shift"], [0x04, "Alt"], [0x08, "Win"],
   [0x10, "Right Ctrl"], [0x20, "Right Shift"], [0x40, "Right Alt"], [0x80, "Right Win"],
 ] as const;
+const RGB_COLORS = [
+  { value: 0x10, name: "Red", hex: "#ff4b55" },
+  { value: 0x20, name: "Orange", hex: "#ff9f32" },
+  { value: 0x30, name: "Yellow", hex: "#ffe34d" },
+  { value: 0x40, name: "Green", hex: "#50e878" },
+  { value: 0x50, name: "Cyan", hex: "#35d8e8" },
+  { value: 0x60, name: "Blue", hex: "#4c78ff" },
+  { value: 0x70, name: "Purple", hex: "#a66bff" },
+] as const;
+const RGB_MODES = [0, 1, 2, 3, 4, 5] as const;
 
 type KeyAssignment = { modifier: number; keyCode: number };
 
@@ -170,6 +180,10 @@ export default function Home() {
   const [assignments, setAssignments] = useState<KeyAssignment[]>([{ modifier: 0x01, keyCode: 0x06 }, { modifier: 0x01, keyCode: 0x19 }]);
   const [writeStatus, setWriteStatus] = useState<"idle" | "writing" | "success" | "error">("idle");
   const [writeMessage, setWriteMessage] = useState("Read the keypad before editing its assignments.");
+  const [rgbColor, setRgbColor] = useState(0x50);
+  const [rgbMode, setRgbMode] = useState(0);
+  const [rgbStatus, setRgbStatus] = useState<"idle" | "writing" | "success" | "error">("idle");
+  const [rgbMessage, setRgbMessage] = useState("Choose a color and firmware mode, then apply it to the keypad.");
 
   const supported = useMemo(
     () => typeof navigator !== "undefined" && "hid" in navigator,
@@ -349,6 +363,35 @@ export default function Home() {
     setReadMessage(`Copied ${packets.length} raw configuration packet${packets.length === 1 ? "" : "s"}.`);
   }
 
+  async function applyRgb() {
+    if (!device?.opened || rgbStatus === "writing") return;
+    setRgbStatus("writing");
+    setRgbMessage("Saving the lighting color and mode…");
+
+    try {
+      const payload = new Uint8Array(64);
+      payload[0] = 0xfe;
+      payload[1] = 0xb0;
+      payload[2] = 0x01;
+      payload[3] = 0x01;
+      payload[9] = 0x01;
+      payload[11] = rgbColor | rgbMode;
+      await device.sendReport(3, payload);
+
+      const commit = new Uint8Array(64);
+      commit.set([0xfd, 0xfe, 0xff]);
+      await device.sendReport(3, commit);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const color = RGB_COLORS.find((option) => option.value === rgbColor)?.name ?? "selected";
+      setRgbStatus("success");
+      setRgbMessage(`${color}, Mode ${rgbMode} was saved. Confirm the visible effect on the keypad.`);
+    } catch (error) {
+      setRgbStatus("error");
+      setRgbMessage(error instanceof Error ? error.message : "The keypad could not save the RGB setting.");
+    }
+  }
+
   return (
     <main>
       <header className="topbar">
@@ -514,6 +557,61 @@ export default function Home() {
               )}
             </div>
           </details>
+        </article>
+
+        <article className="rgbCard" aria-labelledby="rgb-title">
+          <div className="rgbIntro">
+            <p className="eyebrow">LIGHTING CONTROL</p>
+            <h3 id="rgb-title">RGB settings</h3>
+            <p>
+              Choose one of the seven firmware colors and six built-in effects. The original
+              software names the effects only Mode 0–5, so we will identify their behavior together.
+            </p>
+            <div
+              className="rgbOrb"
+              style={{ backgroundColor: RGB_COLORS.find((option) => option.value === rgbColor)?.hex, boxShadow: `0 0 70px ${RGB_COLORS.find((option) => option.value === rgbColor)?.hex}` }}
+              aria-hidden="true"
+            />
+          </div>
+
+          <div className="rgbControls">
+            <fieldset>
+              <legend>COLOR</legend>
+              <div className="colorOptions">
+                {RGB_COLORS.map((option) => (
+                  <button
+                    type="button"
+                    className={rgbColor === option.value ? "selected" : ""}
+                    onClick={() => { setRgbColor(option.value); setRgbStatus("idle"); }}
+                    key={option.value}
+                    aria-pressed={rgbColor === option.value}
+                  >
+                    <i style={{ backgroundColor: option.hex }} />{option.name}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>EFFECT</legend>
+              <div className="modeOptions">
+                {RGB_MODES.map((mode) => (
+                  <button
+                    type="button"
+                    className={rgbMode === mode ? "selected" : ""}
+                    onClick={() => { setRgbMode(mode); setRgbStatus("idle"); }}
+                    key={mode}
+                    aria-pressed={rgbMode === mode}
+                  >Mode {mode}</button>
+                ))}
+              </div>
+            </fieldset>
+
+            <button className="applyRgbButton" onClick={applyRgb} disabled={status !== "connected" || rgbStatus === "writing"}>
+              {rgbStatus === "writing" ? "Applying RGB…" : "Apply RGB to keypad"}
+            </button>
+            <p className={`rgbStatus ${rgbStatus}`} aria-live="polite">{rgbMessage}</p>
+          </div>
         </article>
       </section>
 

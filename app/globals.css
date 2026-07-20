@@ -152,6 +152,27 @@ dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fon
 .packetViewer li { display: grid; grid-template-columns: 30px minmax(0,1fr); gap: 10px; padding: 7px 0; border-bottom: 1px solid #ffffff0d; }
 .packetViewer li > span { color: var(--acid); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .packetViewer code { color: #c5c3c9; font-size: 10px; white-space: nowrap; overflow-x: auto; }
+.rgbCard { margin-top: 30px; border: 1px solid #ffffff25; display: grid; grid-template-columns: minmax(280px,.72fr) minmax(0,1.28fr); background: #ffffff08; }
+.rgbIntro { position: relative; min-height: 430px; padding: 30px; overflow: hidden; border-right: 1px solid #ffffff25; isolation: isolate; }
+.rgbIntro .eyebrow { color: var(--acid); margin-bottom: 12px; }
+.rgbIntro h3 { margin: 0; font-size: 30px; letter-spacing: -.04em; }
+.rgbIntro > p:not(.eyebrow) { color: #aaa8ae; font-size: 13px; line-height: 1.6; max-width: 430px; }
+.rgbOrb { position: absolute; width: 190px; height: 190px; border-radius: 50%; right: 50%; bottom: 18px; transform: translateX(50%); opacity: .72; transition: background-color .2s, box-shadow .2s; z-index: -1; }
+.rgbOrb::after { content: ""; position: absolute; inset: 30px; border-radius: 50%; background: #17171d; box-shadow: inset 0 0 0 1px #ffffff38; }
+.rgbControls { padding: 30px; }
+.rgbControls fieldset { border: 0; padding: 0; margin: 0 0 24px; }
+.rgbControls legend { margin-bottom: 11px; color: #929098; font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .13em; }
+.colorOptions { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+.colorOptions button, .modeOptions button { min-height: 42px; border: 1px solid #ffffff2b; background: transparent; color: #c7c5cb; font-size: 11px; }
+.colorOptions button { display: flex; gap: 8px; justify-content: center; align-items: center; }
+.colorOptions i { width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 10px currentColor; }
+.colorOptions button.selected, .modeOptions button.selected { border-color: var(--acid); background: #d8ff3e12; color: var(--acid); font-weight: 800; }
+.modeOptions { display: grid; grid-template-columns: repeat(6,1fr); gap: 8px; }
+.applyRgbButton { width: 100%; min-height: 50px; border: 1px solid var(--acid); background: var(--acid); color: var(--ink); font-weight: 900; }
+.applyRgbButton:disabled { cursor: default; opacity: .4; }
+.rgbStatus { min-height: 32px; color: #aaa8ae; font-size: 11px; line-height: 1.5; margin: 13px 0 0; }
+.rgbStatus.success { color: var(--acid); }
+.rgbStatus.error { color: #ff9c96; }
 footer { max-width: 1280px; margin: auto; min-height: 86px; padding: 0 38px; display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; letter-spacing: .12em; }
 .steps { display: flex; gap: 8px; }
 .steps i { width: 42px; height: 3px; background: var(--line); }
@@ -163,6 +184,8 @@ footer { max-width: 1280px; margin: auto; min-height: 86px; padding: 0 38px; dis
   .deviceStage::before { width: 380px; height: 380px; }
   .reportGrid { grid-template-columns: 1fr; }
   .diagnosticCopy { padding: 24px; }
+  .rgbCard { grid-template-columns: 1fr; }
+  .rgbIntro { min-height: 340px; border-right: 0; border-bottom: 1px solid #ffffff25; }
 }
 @media (max-width: 600px) {
   .topbar, .hero, footer { padding-left: 20px; padding-right: 20px; }
@@ -176,6 +199,9 @@ footer { max-width: 1280px; margin: auto; min-height: 86px; padding: 0 38px; dis
   .collectionCard ul { display: grid; gap: 7px; }
   .keyEditors { grid-template-columns: 1fr; }
   .applyButton, .writeStatus { grid-column: 1; }
+  .rgbControls, .rgbIntro { padding: 22px; }
+  .colorOptions { grid-template-columns: repeat(2,1fr); }
+  .modeOptions { grid-template-columns: repeat(3,1fr); }
   footer p:last-child { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
