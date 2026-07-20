@@ -9,35 +9,13 @@ function KeypadIllustration() {
     >
       <div className="glow glowA" />
       <div className="glow glowB" />
-      <div className="keypad">
-        <div className="caseSeam" />
-        <div className="heroKeyAssembly keyOne">
-          <div className="key">
-            <span>Copy</span>
-          </div>
-          <div className="switchLayer">
-            <i />
-            <i />
-            <i />
-          </div>
-          <div className="keySocket" />
-        </div>
-        <div className="heroKeyAssembly keyTwo">
-          <div className="key">
-            <span>Paste</span>
-          </div>
-          <div className="switchLayer">
-            <i />
-            <i />
-            <i />
-          </div>
-          <div className="keySocket" />
-        </div>
-        <div className="statusLights" aria-hidden="true">
-          <i />
-          <i />
-        </div>
-      </div>
+      {/* A plain image keeps this component portable to the static Vite build. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        className="keypadProduct"
+        src="keypad-hero.png"
+        alt="Black SIKAI two-key keypad with Copy and Paste keycaps"
+      />
       <p>USB-C · ONBOARD MEMORY · RGB</p>
     </div>
   );

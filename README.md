@@ -1,8 +1,8 @@
 # SIKAI Keypad Lab
 
-[![Keypad Lab — SIKAI shortcut and RGB editor](public/og.png)](https://sikai-keypad-lab.leehoemun.chatgpt.site/)
+[![Keypad Lab — SIKAI shortcut and RGB editor](public/og.png)](https://elabar.github.io/SIKAI-Keypad/)
 
-**[Open Keypad Lab and configure your keypad →](https://sikai-keypad-lab.leehoemun.chatgpt.site/)**
+**[Open Keypad Lab and configure your keypad →](https://elabar.github.io/SIKAI-Keypad/)**
 
 A browser-based configurator for the SIKAI two-key RGB keypad. It uses WebHID
 to read and update onboard key assignments and supported lighting settings.
