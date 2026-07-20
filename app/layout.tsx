@@ -9,17 +9,17 @@ export async function generateMetadata(): Promise<Metadata> {
   const imageUrl = new URL("/og.png", `${protocol}://${host}`);
 
   return {
-    title: "Keypad Lab — SIKAI Hardware Probe",
-    description: "A read-only WebHID capability check for the SIKAI two-key RGB macropad.",
+    title: "Keypad Lab — SIKAI Shortcut Editor",
+    description: "Read and configure shortcuts on a SIKAI two-key RGB macropad with WebHID.",
     openGraph: {
-      title: "Keypad Lab — SIKAI Hardware Probe",
-      description: "Safely inspect a SIKAI two-key RGB macropad in your browser.",
+      title: "Keypad Lab — SIKAI Shortcut Editor",
+      description: "Read and configure a SIKAI two-key RGB macropad in your browser.",
       images: [{ url: imageUrl, width: 1536, height: 910, alt: "Keypad Lab read-only SIKAI hardware probe" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Keypad Lab — SIKAI Hardware Probe",
-      description: "Safely inspect a SIKAI two-key RGB macropad in your browser.",
+      title: "Keypad Lab — SIKAI Shortcut Editor",
+      description: "Read and configure a SIKAI two-key RGB macropad in your browser.",
       images: [imageUrl],
     },
   };

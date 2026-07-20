@@ -86,17 +86,77 @@ const KEY_NAMES: Record<number, string> = {
   0x1c: "Y", 0x1d: "Z", 0x1e: "1", 0x1f: "2", 0x20: "3", 0x21: "4",
   0x22: "5", 0x23: "6", 0x24: "7", 0x25: "8", 0x26: "9", 0x27: "0",
   0x28: "Enter", 0x29: "Escape", 0x2a: "Backspace", 0x2b: "Tab", 0x2c: "Space",
+  0x2d: "-", 0x2e: "=", 0x2f: "[", 0x30: "]", 0x31: "\\", 0x33: ";",
+  0x34: "'", 0x35: "`", 0x36: ",", 0x37: ".", 0x38: "/", 0x39: "Caps Lock",
+  0x3a: "F1", 0x3b: "F2", 0x3c: "F3", 0x3d: "F4", 0x3e: "F5", 0x3f: "F6",
+  0x40: "F7", 0x41: "F8", 0x42: "F9", 0x43: "F10", 0x44: "F11", 0x45: "F12",
+  0x49: "Insert", 0x4a: "Home", 0x4b: "Page Up", 0x4c: "Delete", 0x4d: "End",
+  0x4e: "Page Down", 0x4f: "Right Arrow", 0x50: "Left Arrow", 0x51: "Down Arrow", 0x52: "Up Arrow",
 };
 
+const KEY_OPTIONS = Object.entries(KEY_NAMES).map(([code, name]) => ({ code: Number(code), name }));
+const MODIFIER_OPTIONS = [
+  [0x01, "Ctrl"], [0x02, "Shift"], [0x04, "Alt"], [0x08, "Win"],
+  [0x10, "Right Ctrl"], [0x20, "Right Shift"], [0x40, "Right Alt"], [0x80, "Right Win"],
+] as const;
+
+type KeyAssignment = { modifier: number; keyCode: number };
+
+function packetBytes(packet: string) {
+  return packet.split(" ").map((value) => Number.parseInt(value, 16));
+}
+
+function packetForSlot(source: string[], slot: number) {
+  return source.find((packet) => packetBytes(packet)[1] === slot);
+}
+
 function decodePacket(packet: string) {
-  const bytes = packet.split(" ").map((value) => Number.parseInt(value, 16));
+  const bytes = packetBytes(packet);
   const modifiers = [
-    [0x01, "Ctrl"], [0x02, "Shift"], [0x04, "Alt"], [0x08, "Meta"],
+    [0x01, "Ctrl"], [0x02, "Shift"], [0x04, "Alt"], [0x08, "Win"],
     [0x10, "Right Ctrl"], [0x20, "Right Shift"], [0x40, "Right Alt"], [0x80, "Right Meta"],
   ] as const;
   const parts = modifiers.filter(([mask]) => (bytes[10] & mask) !== 0).map(([, name]) => name);
   parts.push(KEY_NAMES[bytes[11]] ?? hex(bytes[11], 2));
-  return { slot: bytes[1], actionType: bytes[9], shortcut: parts.join(" + ") };
+  return { slot: bytes[1], keyCount: bytes[9], modifier: bytes[10], keyCode: bytes[11], shortcut: parts.join(" + ") };
+}
+
+async function requestLayerOne(device: KeypadDevice, onPacket?: (packets: string[]) => void) {
+  const received: string[] = [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let finish: (() => void) | undefined;
+
+  const handleReport = (event: HidInputReportEvent) => {
+    if (event.reportId !== 3) return;
+    const bytes = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
+    received.push(Array.from(bytes, (byte) => byte.toString(16).toUpperCase().padStart(2, "0")).join(" "));
+    onPacket?.([...received]);
+    if (received.length >= 24) finish?.();
+  };
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    finish = () => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      device.removeEventListener("inputreport", handleReport);
+      resolve();
+    };
+
+    device.addEventListener("inputreport", handleReport);
+    timer = setTimeout(finish, 3000);
+    const payload = new Uint8Array(64);
+    payload.set([0xfa, 0x0f, 0x03, 0x01]);
+    device.sendReport(3, payload).catch((error) => {
+      if (timer) clearTimeout(timer);
+      device.removeEventListener("inputreport", handleReport);
+      settled = true;
+      reject(error);
+    });
+  });
+
+  return received;
 }
 
 export default function Home() {
@@ -107,6 +167,10 @@ export default function Home() {
   const [readStatus, setReadStatus] = useState<"idle" | "reading" | "success" | "error">("idle");
   const [packets, setPackets] = useState<string[]>([]);
   const [readMessage, setReadMessage] = useState("Connect the confirmed configuration channel to enable this diagnostic.");
+  const [assignments, setAssignments] = useState<KeyAssignment[]>([{ modifier: 0x01, keyCode: 0x06 }, { modifier: 0x01, keyCode: 0x19 }]);
+  const [writeStatus, setWriteStatus] = useState<"idle" | "writing" | "success" | "error">("idle");
+  const [writeMessage, setWriteMessage] = useState("Read the keypad before editing its assignments.");
+  const [writeConfirmed, setWriteConfirmed] = useState(false);
 
   const supported = useMemo(
     () => typeof navigator !== "undefined" && "hid" in navigator,
@@ -116,6 +180,7 @@ export default function Home() {
     () => packets.map(decodePacket).filter((record) => record.slot === 1 || record.slot === 2).sort((a, b) => a.slot - b.slot),
     [packets],
   );
+  const assignmentsChanged = decodedKeys.length === 2 && decodedKeys.some((record, index) => record.modifier !== assignments[index]?.modifier || record.keyCode !== assignments[index]?.keyCode);
 
   useEffect(() => {
     const hid = (navigator as HidNavigator).hid;
@@ -172,6 +237,9 @@ export default function Home() {
       setStatus("connected");
       setReadStatus("idle");
       setPackets([]);
+      setWriteStatus("idle");
+      setWriteConfirmed(false);
+      setWriteMessage("Read the keypad before editing its assignments.");
       setReadMessage("Ready to request layer 1. This does not save or change the keypad.");
       setMessage("Configuration channel confirmed. Report ID 3 is available in both directions.");
     } catch (error) {
@@ -186,6 +254,9 @@ export default function Home() {
     setDevice(null);
     setReadStatus("idle");
     setPackets([]);
+    setWriteStatus("idle");
+    setWriteConfirmed(false);
+    setWriteMessage("Read the keypad before editing its assignments.");
     setReadMessage("Connect the confirmed configuration channel to enable this diagnostic.");
     setStatus("idle");
     setMessage("Probe closed. No settings were changed.");
@@ -198,44 +269,19 @@ export default function Home() {
     setPackets([]);
     setReadMessage("Listening for configuration packets from layer 1…");
 
-    const received: string[] = [];
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let finish: (() => void) | undefined;
-
-    const handleReport = (event: HidInputReportEvent) => {
-      if (event.reportId !== 3) return;
-      const bytes = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
-      received.push(Array.from(bytes, (byte) => byte.toString(16).toUpperCase().padStart(2, "0")).join(" "));
-      setPackets([...received]);
-      if (received.length >= 24) finish?.();
-    };
-
     try {
-      await new Promise<void>((resolve, reject) => {
-        let settled = false;
-        finish = () => {
-          if (settled) return;
-          settled = true;
-          if (timer) clearTimeout(timer);
-          device.removeEventListener("inputreport", handleReport);
-          resolve();
-        };
-
-        device.addEventListener("inputreport", handleReport);
-        timer = setTimeout(finish, 3000);
-
-        const payload = new Uint8Array(64);
-        payload.set([0xfa, 0x0f, 0x03, 0x01]);
-        device.sendReport(3, payload).catch((error) => {
-          if (timer) clearTimeout(timer);
-          device.removeEventListener("inputreport", handleReport);
-          settled = true;
-          reject(error);
-        });
-      });
+      const received = await requestLayerOne(device, setPackets);
 
       setPackets([...received]);
-      if (received.length) {
+      const physicalKeys = [packetForSlot(received, 1), packetForSlot(received, 2)];
+      if (physicalKeys.every(Boolean)) {
+        setAssignments(physicalKeys.map((packet) => {
+          const record = decodePacket(packet as string);
+          return { modifier: record.modifier, keyCode: record.keyCode };
+        }));
+        setWriteStatus("idle");
+        setWriteConfirmed(false);
+        setWriteMessage("Choose a shortcut for either key. Changes are only sent when you press Apply.");
         setReadStatus("success");
         setReadMessage(`Received ${received.length} configuration packet${received.length === 1 ? "" : "s"}. Nothing was saved or changed.`);
       } else {
@@ -245,6 +291,59 @@ export default function Home() {
     } catch (error) {
       setReadStatus("error");
       setReadMessage(error instanceof Error ? error.message : "The browser could not send the read request.");
+    }
+  }
+
+  function updateAssignment(index: number, patch: Partial<KeyAssignment>) {
+    setAssignments((current) => current.map((assignment, assignmentIndex) => assignmentIndex === index ? { ...assignment, ...patch } : assignment));
+    setWriteConfirmed(false);
+    setWriteStatus("idle");
+    setWriteMessage("Review the new shortcuts, acknowledge the onboard-memory change, then press Apply.");
+  }
+
+  async function applyAssignments() {
+    if (!device?.opened || !assignmentsChanged || !writeConfirmed || writeStatus === "writing") return;
+
+    setWriteStatus("writing");
+    setWriteMessage("Writing the changed key records, saving once, then reading them back…");
+
+    try {
+      for (let index = 0; index < 2; index += 1) {
+        const original = packetForSlot(packets, index + 1);
+        const decoded = original ? decodePacket(original) : null;
+        const next = assignments[index];
+        if (!original || !decoded || (decoded.modifier === next.modifier && decoded.keyCode === next.keyCode)) continue;
+
+        const payload = new Uint8Array(64);
+        payload.set(packetBytes(original).slice(0, 50));
+        payload[9] = 1;
+        payload[10] = next.modifier;
+        payload[11] = next.keyCode;
+        payload.fill(0, 12, 50);
+        await device.sendReport(3, payload);
+      }
+
+      const commit = new Uint8Array(64);
+      commit.set([0xfd, 0xfe, 0xff]);
+      await device.sendReport(3, commit);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const verifiedPackets = await requestLayerOne(device);
+      const verified = [1, 2].every((slot, index) => {
+        const packet = packetForSlot(verifiedPackets, slot);
+        if (!packet) return false;
+        const record = decodePacket(packet);
+        return record.modifier === assignments[index].modifier && record.keyCode === assignments[index].keyCode;
+      });
+
+      setPackets(verifiedPackets);
+      setWriteConfirmed(false);
+      if (!verified) throw new Error("The keypad did not read back the requested shortcuts. Its previous settings may still be active.");
+      setWriteStatus("success");
+      setWriteMessage("Saved and verified from the keypad. The new shortcuts are active in onboard memory.");
+    } catch (error) {
+      setWriteStatus("error");
+      setWriteMessage(error instanceof Error ? error.message : "The keypad could not save the new shortcuts.");
     }
   }
 
@@ -262,16 +361,16 @@ export default function Home() {
           <span className="brandMark" aria-hidden="true"><i /><i /></span>
           KEYPAD LAB
         </a>
-          <span className="readOnlyBadge"><span /> SAFE DIAGNOSTIC</span>
+          <span className="readOnlyBadge"><span /> CONFIGURATION MODE</span>
       </header>
 
       <section className="hero" id="top">
         <div className="intro">
           <p className="eyebrow">SIKAI · VENDOR CONFIGURATION CHANNEL</p>
-          <h1>Let&apos;s identify your <em>keypad.</em></h1>
+          <h1>Make it your <em>keypad.</em></h1>
           <p className="lede">
-            This page targets the keypad&apos;s dedicated vendor interface, not its normal
-            keyboard interface. Nothing runs automatically and no save command is used.
+            Read the two onboard shortcuts, choose any standard keyboard combination,
+            and apply it directly from Chrome or Edge. Nothing is written automatically.
           </p>
 
           <div className={`statusPanel ${status}`} aria-live="polite">
@@ -357,35 +456,62 @@ export default function Home() {
 
         <article className={`diagnosticCard ${readStatus}`}>
           <div className="diagnosticCopy">
-            <p className="eyebrow">SAFE PROTOCOL TEST</p>
-            <h3>Read layer 1</h3>
+            <p className="eyebrow">KEY ASSIGNMENT EDITOR</p>
+            <h3>Configure layer 1</h3>
             <p>
-              Sends SIKAI&apos;s non-persistent layer-read request on report ID 3, then listens for
-              the reply for three seconds. It does not assign keys, change RGB, or write to flash.
+              Start by reading the current configuration. You can then edit either physical key;
+              the page saves only after explicit confirmation and verifies the result by reading it back.
             </p>
             <div className="diagnosticActions">
               <button className="acidButton" onClick={readLayerOne} disabled={status !== "connected" || readStatus === "reading"}>
-                {readStatus === "reading" ? "Reading…" : "Read layer 1"}
+                {readStatus === "reading" ? "Reading…" : packets.length ? "Reload from keypad" : "Read current settings"}
               </button>
               {packets.length > 0 && <button className="darkButton" onClick={copyPackets}>Copy raw packets</button>}
             </div>
             <p className="diagnosticStatus" aria-live="polite">{readMessage}</p>
             {decodedKeys.length === 2 && (
-              <div className="decodedKeys" aria-label="Decoded physical key assignments">
-                {decodedKeys.map((record) => (
-                  <div key={record.slot}>
-                    <span>KEY {record.slot}</span>
-                    <strong>{record.shortcut}</strong>
-                    <small>{record.slot === 1 ? "COPY" : "PASTE"} · LAYER 1</small>
+              <div className="keyEditors" aria-label="Physical key assignments">
+                {assignments.map((assignment, index) => (
+                  <div className="keyEditor" key={index}>
+                    <div className="keyEditorHeading">
+                      <span>KEY {index + 1}</span>
+                      <small>CURRENT: {decodedKeys[index]?.shortcut}</small>
+                    </div>
+                    <div className="modifierChecks" aria-label={`Modifiers for key ${index + 1}`}>
+                      {MODIFIER_OPTIONS.map(([mask, label]) => (
+                        <label key={mask}>
+                          <input
+                            type="checkbox"
+                            checked={(assignment.modifier & mask) !== 0}
+                            onChange={(event) => updateAssignment(index, { modifier: event.target.checked ? assignment.modifier | mask : assignment.modifier & ~mask })}
+                          />
+                          <span>{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <label className="keySelect">
+                      <span>KEY</span>
+                      <select value={assignment.keyCode} onChange={(event) => updateAssignment(index, { keyCode: Number(event.target.value) })}>
+                        {KEY_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.name}</option>)}
+                      </select>
+                    </label>
+                    <strong className="shortcutPreview">{[...MODIFIER_OPTIONS.filter(([mask]) => (assignment.modifier & mask) !== 0).map(([, label]) => label), KEY_NAMES[assignment.keyCode]].join(" + ")}</strong>
                   </div>
                 ))}
+                <label className="writeConsent">
+                  <input type="checkbox" checked={writeConfirmed} onChange={(event) => setWriteConfirmed(event.target.checked)} />
+                  <span>I understand Apply changes the keypad&apos;s onboard layer 1 shortcuts.</span>
+                </label>
+                <button className="applyButton" onClick={applyAssignments} disabled={!assignmentsChanged || !writeConfirmed || writeStatus === "writing"}>
+                  {writeStatus === "writing" ? "Applying & verifying…" : assignmentsChanged ? "Apply to keypad" : "No changes to apply"}
+                </button>
+                <p className={`writeStatus ${writeStatus}`} aria-live="polite">{writeMessage}</p>
               </div>
             )}
-            <div className="saveLock"><span aria-hidden="true">×</span><p><b>Remapping locked</b><br />No write or flash-save command is enabled yet.</p></div>
           </div>
 
           <div className="packetViewer" aria-label="Raw configuration packets">
-            <div className="packetHeader"><span>REPORT 03</span><span>{packets.length} / 24 PACKETS</span></div>
+            <div className="packetHeader"><span>ADVANCED · REPORT 03</span><span>{packets.length} / 24 PACKETS</span></div>
             {packets.length ? (
               <ol>
                 {packets.map((packet, index) => <li key={`${index}-${packet}`}><span>{String(index + 1).padStart(2, "0")}</span><code>{packet}</code></li>)}
@@ -398,9 +524,9 @@ export default function Home() {
       </section>
 
       <footer>
-        <p>STEP 2 OF 3</p>
-        <div className="steps"><i className="active" /><i className="active" /><i /></div>
-        <p>Next: verify a reversible remapping command</p>
+        <p>SHORTCUT EDITOR READY</p>
+        <div className="steps"><i className="active" /><i className="active" /><i className="active" /></div>
+        <p>Read · edit · apply · verify</p>
       </footer>
     </main>
   );
