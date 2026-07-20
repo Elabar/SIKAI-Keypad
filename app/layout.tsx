@@ -11,10 +11,14 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "Keypad Lab — SIKAI Shortcut Editor",
     description: "Read and configure shortcuts on a SIKAI two-key RGB macropad with WebHID.",
+    icons: {
+      icon: "/favicon.svg",
+      shortcut: "/favicon.svg",
+    },
     openGraph: {
       title: "Keypad Lab — SIKAI Shortcut Editor",
       description: "Read and configure a SIKAI two-key RGB macropad in your browser.",
-      images: [{ url: imageUrl, width: 1536, height: 910, alt: "Keypad Lab read-only SIKAI hardware probe" }],
+      images: [{ url: imageUrl, width: 1728, height: 910, alt: "Keypad Lab SIKAI shortcut and RGB editor" }],
     },
     twitter: {
       card: "summary_large_image",
