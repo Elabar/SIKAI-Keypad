@@ -60,6 +60,10 @@ type HidNavigator = Navigator & {
       type: "disconnect",
       listener: (event: Event & { device?: KeypadDevice }) => void,
     ) => void;
+    removeEventListener: (
+      type: "disconnect",
+      listener: (event: Event & { device?: KeypadDevice }) => void,
+    ) => void;
   };
 };
 
@@ -131,6 +135,22 @@ const RGB_MODES = [
 ] as const;
 
 type KeyAssignment = { modifier: number; keyCode: number };
+
+const DEFAULT_ASSIGNMENTS: KeyAssignment[] = [
+  { modifier: 0x01, keyCode: 0x06 },
+  { modifier: 0x01, keyCode: 0x19 },
+];
+const DEFAULT_RGB_COLOR = 0x50;
+const DEFAULT_RGB_MODE = 0;
+
+function closestFirmwareColor(colors: Uint8Array) {
+  const [red = 0, green = 0, blue = 0] = colors;
+  return RGB_COLORS.reduce((closest, option) => {
+    const optionRgb = [1, 3, 5].map((index) => Number.parseInt(option.hex.slice(index, index + 2), 16));
+    const distance = (red - optionRgb[0]) ** 2 + (green - optionRgb[1]) ** 2 + (blue - optionRgb[2]) ** 2;
+    return distance < closest.distance ? { value: option.value, distance } : closest;
+  }, { value: DEFAULT_RGB_COLOR as number, distance: Number.POSITIVE_INFINITY }).value;
+}
 
 function packetBytes(packet: string) {
   return packet.split(" ").map((value) => Number.parseInt(value, 16));
@@ -266,11 +286,11 @@ export default function Home() {
   const [readStatus, setReadStatus] = useState<"idle" | "reading" | "success" | "error">("idle");
   const [packets, setPackets] = useState<string[]>([]);
   const [readMessage, setReadMessage] = useState("Connect the confirmed configuration channel to enable this diagnostic.");
-  const [assignments, setAssignments] = useState<KeyAssignment[]>([{ modifier: 0x01, keyCode: 0x06 }, { modifier: 0x01, keyCode: 0x19 }]);
+  const [assignments, setAssignments] = useState<KeyAssignment[]>(DEFAULT_ASSIGNMENTS);
   const [writeStatus, setWriteStatus] = useState<"idle" | "writing" | "success" | "error">("idle");
   const [writeMessage, setWriteMessage] = useState("Read the keypad before editing its assignments.");
-  const [rgbColor, setRgbColor] = useState(0x50);
-  const [rgbMode, setRgbMode] = useState(0);
+  const [rgbColor, setRgbColor] = useState(DEFAULT_RGB_COLOR);
+  const [rgbMode, setRgbMode] = useState(DEFAULT_RGB_MODE);
   const [previewPressed, setPreviewPressed] = useState<number | null>(null);
   const [profileStatus, setProfileStatus] = useState<"idle" | "reading" | "success" | "error">("idle");
   const [profile, setProfile] = useState<FirmwareProfile | null>(null);
@@ -288,20 +308,86 @@ export default function Home() {
   );
   const assignmentsChanged = decodedKeys.length === 2 && decodedKeys.some((record, index) => record.modifier !== assignments[index]?.modifier || record.keyCode !== assignments[index]?.keyCode);
 
+  function resetDeviceSections() {
+    setDevice(null);
+    setResult(null);
+    setReadStatus("idle");
+    setPackets([]);
+    setAssignments(DEFAULT_ASSIGNMENTS.map((assignment) => ({ ...assignment })));
+    setWriteStatus("idle");
+    setWriteMessage("Connect the keypad to load its current assignments.");
+    setReadMessage("Current assignments will load automatically after connecting.");
+    setProfileStatus("idle");
+    setProfile(null);
+    setProfileMessage("Firmware details will load automatically after connecting.");
+    setRgbColor(DEFAULT_RGB_COLOR);
+    setRgbMode(DEFAULT_RGB_MODE);
+    setPreviewPressed(null);
+    setRgbStatus("idle");
+    setRgbMessage("Connect the keypad to load supported lighting settings.");
+  }
+
   useEffect(() => {
     const hid = (navigator as HidNavigator).hid;
     if (!hid) return;
 
     const handleDisconnect = (event: Event & { device?: KeypadDevice }) => {
       if (event.device === device) {
-        setDevice(null);
+        resetDeviceSections();
         setStatus("idle");
-        setMessage("Keypad disconnected. No settings were changed.");
+        setMessage("Keypad disconnected. The assignment and RGB editors were reset.");
       }
     };
 
     hid.addEventListener("disconnect", handleDisconnect);
+    return () => hid.removeEventListener("disconnect", handleDisconnect);
   }, [device]);
+
+  async function loadLayerOne(target: KeypadDevice) {
+    setReadStatus("reading");
+    setPackets([]);
+    setReadMessage("Loading the current layer 1 assignments…");
+
+    try {
+      const received = await requestLayerOne(target, setPackets);
+      setPackets([...received]);
+      const physicalKeys = [packetForSlot(received, 1), packetForSlot(received, 2)];
+      if (!physicalKeys.every(Boolean)) throw new Error("The keypad did not return both physical key assignments.");
+
+      setAssignments(physicalKeys.map((packet) => {
+        const record = decodePacket(packet as string);
+        return { modifier: record.modifier, keyCode: record.keyCode };
+      }));
+      setWriteStatus("idle");
+      setWriteMessage("Current assignments loaded. Edit either key, then apply your changes.");
+      setReadStatus("success");
+      setReadMessage("Current layer 1 assignments loaded from the keypad.");
+    } catch (error) {
+      setReadStatus("error");
+      setReadMessage(error instanceof Error ? error.message : "The current assignments could not be loaded.");
+    }
+  }
+
+  async function loadCurrentRgb(target: KeypadDevice, detected: FirmwareProfile) {
+    setRgbStatus("idle");
+    if (detected.protocol === 0x0a) {
+      setRgbMessage("Loading the current RGB table…");
+      try {
+        const current = await requestRgbLayer(target, 0);
+        setRgbMode(RGB_MODES.some((mode) => mode.value === current.mode) ? current.mode : DEFAULT_RGB_MODE);
+        setRgbColor(closestFirmwareColor(current.colors));
+        setRgbStatus("success");
+        setRgbMessage("Current layer 1 lighting was loaded from the keypad.");
+      } catch (error) {
+        setRgbStatus("error");
+        setRgbMessage(error instanceof Error ? error.message : "The current RGB table could not be loaded.");
+      }
+    } else if (detected.protocol === 0x00) {
+      setRgbMessage("Legacy protocol 0x00 supports RGB saving, but does not expose a readable current-lighting record. Choose a setting to replace it.");
+    } else {
+      setRgbMessage(`RGB is disabled because protocol ${hex(detected.protocol, 2)} is not supported.`);
+    }
+  }
 
   async function connect() {
     const hid = (navigator as HidNavigator).hid;
@@ -341,17 +427,9 @@ export default function Home() {
         collections: selected.collections ?? [],
       });
       setStatus("connected");
-      setReadStatus("idle");
-      setPackets([]);
-      setWriteStatus("idle");
-      setProfileStatus("idle");
-      setProfile(null);
-      setProfileMessage("Run the read-only firmware check to select the correct RGB protocol.");
-      setRgbStatus("idle");
-      setRgbMessage("Detecting the firmware protocol…");
-      setWriteMessage("Read the keypad before editing its assignments.");
-      setReadMessage("Ready to request layer 1. This does not save or change the keypad.");
-      setMessage("Configuration channel confirmed. Report ID 3 is available in both directions.");
+      setMessage("Connected. Loading current assignments and supported lighting settings…");
+
+      await loadLayerOne(selected);
 
       setProfileStatus("reading");
       try {
@@ -360,19 +438,18 @@ export default function Home() {
         setProfileStatus("success");
         if (detected.protocol === 0x00) {
           setProfileMessage("Legacy protocol 0x00 detected. The corrected SIKAI RGB record is supported.");
-          setRgbMessage("Legacy RGB support is ready. Apply uses RGB key mode 0x08 and verifies that the keypad remains responsive.");
         } else if (detected.protocol === 0x0a) {
           setProfileMessage("Protocol 0x0A detected. SIKAI's three-layer RGB table is supported.");
-          setRgbMessage("RGB table support is ready. Existing colors on every layer are read and preserved before saving.");
         } else {
           setProfileMessage(`Protocol ${hex(detected.protocol, 2)} is not supported for RGB writes.`);
-          setRgbMessage("RGB writing is disabled for this firmware. Shortcut configuration remains available.");
         }
+        await loadCurrentRgb(selected, detected);
       } catch (error) {
         setProfileStatus("error");
         setProfileMessage(error instanceof Error ? error.message : "The firmware identity could not be read.");
         setRgbMessage("RGB writing stays disabled until the firmware can be identified.");
       }
+      setMessage("Finished loading available keypad settings. Changes are saved only when you press Apply.");
     } catch (error) {
       const detail = error instanceof Error ? error.message : "The browser could not open the device.";
       setStatus("error");
@@ -382,50 +459,14 @@ export default function Home() {
 
   async function disconnect() {
     if (device?.opened) await device.close();
-    setDevice(null);
-    setReadStatus("idle");
-    setPackets([]);
-    setWriteStatus("idle");
-    setProfileStatus("idle");
-    setProfile(null);
-    setProfileMessage("Run the read-only firmware check to select the correct RGB protocol.");
-    setRgbStatus("idle");
-    setRgbMessage("RGB is enabled only after a supported firmware protocol is identified.");
-    setWriteMessage("Read the keypad before editing its assignments.");
-    setReadMessage("Connect the confirmed configuration channel to enable this diagnostic.");
+    resetDeviceSections();
     setStatus("idle");
-    setMessage("Probe closed. No settings were changed.");
+    setMessage("Keypad disconnected. The assignment and RGB editors were reset.");
   }
 
   async function readLayerOne() {
     if (!device?.opened || readStatus === "reading") return;
-
-    setReadStatus("reading");
-    setPackets([]);
-    setReadMessage("Listening for configuration packets from layer 1…");
-
-    try {
-      const received = await requestLayerOne(device, setPackets);
-
-      setPackets([...received]);
-      const physicalKeys = [packetForSlot(received, 1), packetForSlot(received, 2)];
-      if (physicalKeys.every(Boolean)) {
-        setAssignments(physicalKeys.map((packet) => {
-          const record = decodePacket(packet as string);
-          return { modifier: record.modifier, keyCode: record.keyCode };
-        }));
-        setWriteStatus("idle");
-        setWriteMessage("Choose a shortcut for either key. Changes are only sent when you press Apply.");
-        setReadStatus("success");
-        setReadMessage(`Received ${received.length} configuration packet${received.length === 1 ? "" : "s"}. Nothing was saved or changed.`);
-      } else {
-        setReadStatus("error");
-        setReadMessage("The request was sent, but no report ID 3 response arrived. Reconnect the keypad and try once more.");
-      }
-    } catch (error) {
-      setReadStatus("error");
-      setReadMessage(error instanceof Error ? error.message : "The browser could not send the read request.");
-    }
+    await loadLayerOne(device);
   }
 
   function updateAssignment(index: number, patch: Partial<KeyAssignment>) {
@@ -503,14 +544,7 @@ export default function Home() {
             ? "Legacy protocol 0x00 confirmed: the corrected SIKAI RGB record is supported."
             : `Protocol ${hex(detected.protocol, 2)} is not supported for RGB writes.`,
       );
-      setRgbStatus("idle");
-      setRgbMessage(
-        detected.protocol === 0x00
-          ? "Legacy RGB support is ready. Apply uses RGB key mode 0x08 and verifies that the keypad remains responsive."
-          : detected.protocol === 0x0a
-            ? "RGB table support is ready. Existing colors on every layer are read and preserved before saving."
-            : "RGB writing is disabled for this firmware. Shortcut configuration remains available.",
-      );
+      await loadCurrentRgb(device, detected);
     } catch (error) {
       setProfileStatus("error");
       setProfileMessage(error instanceof Error ? error.message : "The firmware identity could not be read.");
@@ -616,11 +650,6 @@ export default function Home() {
             <p className="browserWarning">Use a current Chrome or Edge window on Windows for this test.</p>
           )}
 
-          <div className="identityStrip" aria-label="Expected device identity">
-            <span><small>VENDOR</small><b>0x514C</b></span>
-            <span><small>PRODUCT</small><b>0x8851</b></span>
-            <span><small>USAGE</small><b>FF00 / 0001</b></span>
-          </div>
         </div>
 
         <div className="deviceStage" aria-label="Illustration of a two-key RGB keypad">
@@ -637,60 +666,22 @@ export default function Home() {
 
       <section className="resultsSection" aria-labelledby="results-title">
         <div className="sectionHeading">
-          <p className="eyebrow">HARDWARE REPORT</p>
-          <h2 id="results-title">What the browser can see</h2>
+          <p className="eyebrow">KEYPAD CONFIGURATION</p>
+          <h2 id="results-title">Assignments and lighting</h2>
         </div>
-
-        {!result ? (
-          <div className="emptyResult">
-            <span>01</span>
-            <div><strong>No report yet</strong><p>Connect the keypad to reveal its HID collections and report IDs.</p></div>
-          </div>
-        ) : (
-          <div className="reportGrid">
-            <article className="deviceCard">
-              <p>DETECTED DEVICE</p>
-              <h3>{result.name}</h3>
-              <dl>
-                <div><dt>Vendor ID</dt><dd>{result.vendorId}</dd></div>
-                <div><dt>Product ID</dt><dd>{result.productId}</dd></div>
-                <div><dt>Collections</dt><dd>{result.collections.length}</dd></div>
-                <div><dt>Access</dt><dd className="safe">CONFIRMED</dd></div>
-              </dl>
-            </article>
-
-            <div className="collections">
-              {result.collections.map((collection, index) => (
-                <article className="collectionCard" key={`${collection.usagePage}-${collection.usage}-${index}`}>
-                  <span>{String(index + 1).padStart(2, "0")}</span>
-                  <div>
-                    <h3>HID collection</h3>
-                    <p>Usage page {hex(collection.usagePage)} · Usage {hex(collection.usage)}</p>
-                    <ul>
-                      <li>Input reports <b>{reportIds(collection.inputReports)}</b></li>
-                      <li>Output reports <b>{reportIds(collection.outputReports)}</b></li>
-                      <li>Feature reports <b>{reportIds(collection.featureReports)}</b></li>
-                    </ul>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        )}
 
         <article className={`diagnosticCard ${readStatus}`}>
           <div className="diagnosticCopy">
             <p className="eyebrow">KEY ASSIGNMENT EDITOR</p>
             <h3>Configure layer 1</h3>
             <p>
-              Start by reading the current configuration. You can then edit either physical key;
+              Current assignments load automatically when the keypad connects. Edit either physical key;
               the page saves only after explicit confirmation and verifies the result by reading it back.
             </p>
             <div className="diagnosticActions">
               <button className="acidButton" onClick={readLayerOne} disabled={status !== "connected" || readStatus === "reading"}>
-                {readStatus === "reading" ? "Reading…" : packets.length ? "Reload from keypad" : "Read current settings"}
+                {readStatus === "reading" ? "Reading…" : "Reload from keypad"}
               </button>
-              {packets.length > 0 && <button className="darkButton" onClick={copyPackets}>Copy raw packets</button>}
             </div>
             <p className="diagnosticStatus" aria-live="polite">{readMessage}</p>
             {decodedKeys.length === 2 && (
@@ -730,19 +721,6 @@ export default function Home() {
             )}
           </div>
 
-          <details className="advancedPanel">
-            <summary><span>Advanced</span><small>{packets.length} / 24 RAW PACKETS</small></summary>
-            <div className="packetViewer" aria-label="Raw configuration packets">
-              <div className="packetHeader"><span>REPORT 03</span><span>{packets.length} / 24 PACKETS</span></div>
-              {packets.length ? (
-                <ol>
-                  {packets.map((packet, index) => <li key={`${index}-${packet}`}><span>{String(index + 1).padStart(2, "0")}</span><code>{packet}</code></li>)}
-                </ol>
-              ) : (
-                <p>Raw response bytes will appear here. They are diagnostic data only.</p>
-              )}
-            </div>
-          </details>
         </article>
 
         <article className="rgbCard" aria-labelledby="rgb-title">
@@ -766,7 +744,7 @@ export default function Home() {
           </div>
 
           <div className="rgbControls">
-            <fieldset>
+            <fieldset disabled={status !== "connected"}>
               <legend>COLOR</legend>
               <div className="colorOptions">
                 {RGB_COLORS.map((option) => (
@@ -783,7 +761,7 @@ export default function Home() {
               </div>
             </fieldset>
 
-            <fieldset>
+            <fieldset disabled={status !== "connected"}>
               <legend>EFFECT</legend>
               <div className="modeOptions">
                 {RGB_MODES.map((mode) => (
@@ -798,18 +776,6 @@ export default function Home() {
               </div>
             </fieldset>
 
-            <div className="diagnosticActions">
-              <button className="darkButton" type="button" onClick={detectFirmwareProfile} disabled={status !== "connected" || profileStatus === "reading"}>
-                {profileStatus === "reading" ? "Detecting…" : profile ? "Check firmware again" : "Detect firmware protocol"}
-              </button>
-            </div>
-            <p className={`rgbStatus ${profileStatus === "error" ? "error" : profileStatus === "success" ? "success" : ""}`} aria-live="polite">{profileMessage}</p>
-            {profile && (
-              <div className="firmwareProfile" aria-label="Firmware identity result">
-                <span>KEYS {profile.keyCount} · ADD-ONS {profile.addOnCount} · PROTOCOL {hex(profile.protocol, 2)}</span>
-                <code>{profile.raw}</code>
-              </div>
-            )}
             <button
               className="applyRgbButton"
               type="button"
@@ -824,6 +790,71 @@ export default function Home() {
             </p>
           </div>
         </article>
+
+        <details className="debugPanel">
+          <summary><span>Debug information</span><small>HARDWARE · FIRMWARE · RAW PACKETS</small></summary>
+          <div className="debugContent">
+            {!result ? (
+              <div className="emptyResult">
+                <span>01</span>
+                <div><strong>No connected device</strong><p>Hardware details will appear here after connecting.</p></div>
+              </div>
+            ) : (
+              <div className="reportGrid">
+                <article className="deviceCard">
+                  <p>DETECTED DEVICE</p>
+                  <h3>{result.name}</h3>
+                  <dl>
+                    <div><dt>Vendor ID</dt><dd>{result.vendorId}</dd></div>
+                    <div><dt>Product ID</dt><dd>{result.productId}</dd></div>
+                    <div><dt>Collections</dt><dd>{result.collections.length}</dd></div>
+                    <div><dt>Access</dt><dd className="safe">CONFIRMED</dd></div>
+                  </dl>
+                </article>
+                <div className="collections">
+                  {result.collections.map((collection, index) => (
+                    <article className="collectionCard" key={`${collection.usagePage}-${collection.usage}-${index}`}>
+                      <span>{String(index + 1).padStart(2, "0")}</span>
+                      <div>
+                        <h3>HID collection</h3>
+                        <p>Usage page {hex(collection.usagePage)} · Usage {hex(collection.usage)}</p>
+                        <ul>
+                          <li>Input reports <b>{reportIds(collection.inputReports)}</b></li>
+                          <li>Output reports <b>{reportIds(collection.outputReports)}</b></li>
+                          <li>Feature reports <b>{reportIds(collection.featureReports)}</b></li>
+                        </ul>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="debugActions">
+              <button className="darkButton" type="button" onClick={detectFirmwareProfile} disabled={status !== "connected" || profileStatus === "reading"}>
+                {profileStatus === "reading" ? "Detecting…" : "Check firmware again"}
+              </button>
+              <button className="darkButton" type="button" onClick={copyPackets} disabled={!packets.length}>Copy raw packets</button>
+            </div>
+            <p className={`rgbStatus ${profileStatus === "error" ? "error" : profileStatus === "success" ? "success" : ""}`}>{profileMessage}</p>
+            {profile && (
+              <div className="firmwareProfile" aria-label="Firmware identity result">
+                <span>KEYS {profile.keyCount} · ADD-ONS {profile.addOnCount} · PROTOCOL {hex(profile.protocol, 2)}</span>
+                <code>{profile.raw}</code>
+              </div>
+            )}
+            <div className="packetViewer" aria-label="Raw configuration packets">
+              <div className="packetHeader"><span>REPORT 03</span><span>{packets.length} / 24 PACKETS</span></div>
+              {packets.length ? (
+                <ol>
+                  {packets.map((packet, index) => <li key={`${index}-${packet}`}><span>{String(index + 1).padStart(2, "0")}</span><code>{packet}</code></li>)}
+                </ol>
+              ) : (
+                <p>Raw response bytes will appear here after connecting.</p>
+              )}
+            </div>
+          </div>
+        </details>
       </section>
 
       <footer>

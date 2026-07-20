@@ -145,6 +145,16 @@ dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fon
 .advancedPanel summary > small { margin-left: auto; color: #777780; font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .1em; }
 .advancedPanel summary::after { content: "+"; color: var(--acid); font-size: 20px; line-height: 1; }
 .advancedPanel[open] summary::after { content: "−"; }
+.debugPanel { margin-top: 30px; border: 1px solid #ffffff25; background: #0e0e12; }
+.debugPanel summary { min-height: 58px; padding: 0 22px; display: flex; align-items: center; gap: 12px; cursor: pointer; color: #d1cfd4; user-select: none; }
+.debugPanel summary::-webkit-details-marker { display: none; }
+.debugPanel summary > span { font-size: 12px; font-weight: 800; }
+.debugPanel summary > small { margin-left: auto; color: #777780; font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .1em; }
+.debugPanel summary::after { content: "+"; color: var(--acid); font-size: 20px; line-height: 1; }
+.debugPanel[open] summary::after { content: "−"; }
+.debugContent { border-top: 1px solid #ffffff25; padding: 0 22px 22px; }
+.debugActions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+.debugActions button:disabled { opacity: .4; cursor: default; }
 .packetViewer { min-width: 0; padding: 22px; background: #0e0e12; }
 .packetHeader { display: flex; justify-content: space-between; color: var(--acid); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .12em; padding-bottom: 14px; border-bottom: 1px solid #ffffff20; }
 .packetViewer > p { color: #777780; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 22px 0; }
@@ -171,6 +181,8 @@ dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fon
 @keyframes rgbGlow { 0%,100% { opacity: .08; } 50% { opacity: .95; } }
 .rgbControls { padding: 30px; }
 .rgbControls fieldset { border: 0; padding: 0; margin: 0 0 24px; }
+.rgbControls fieldset:disabled { opacity: .42; }
+.rgbControls fieldset:disabled button { cursor: default; }
 .rgbControls legend { margin-bottom: 11px; color: #929098; font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .13em; }
 .colorOptions { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
 .colorOptions button, .modeOptions button { min-height: 42px; border: 1px solid #ffffff2b; background: transparent; color: #c7c5cb; font-size: 11px; }
