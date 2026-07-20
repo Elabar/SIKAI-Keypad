@@ -1,27 +1,33 @@
 import type { CSSProperties } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { RGB_COLORS, RGB_MODES } from "@/lib/sikai-keypad";
-import { useKeypadStore } from "@/stores/keypad-store";
+import { useKeypadActions, useKeypadStore } from "@/stores/keypad-store";
 
 export function RgbEditor() {
   const {
-    connectionStatus, profile, rgbColor, rgbMode, rgbStatus, rgbMessage,
-    setRgbColor, setRgbMode, applyRgb, previewPressed, pressPreview,
-  } = useKeypadStore(useShallow((state) => ({
-    connectionStatus: state.connectionStatus,
-    profile: state.profile,
-    rgbColor: state.rgbColor,
-    rgbMode: state.rgbMode,
-    rgbStatus: state.rgbStatus,
-    rgbMessage: state.rgbMessage,
-    setRgbColor: state.setRgbColor,
-    setRgbMode: state.setRgbMode,
-    applyRgb: state.applyRgb,
-    previewPressed: state.previewPressed,
-    pressPreview: state.pressPreview,
-  })));
+    connectionStatus,
+    profile,
+    rgbColor,
+    rgbMode,
+    rgbStatus,
+    rgbMessage,
+    previewPressed,
+  } = useKeypadStore(
+    useShallow((state) => ({
+      connectionStatus: state.connectionStatus,
+      profile: state.profile,
+      rgbColor: state.rgbColor,
+      rgbMode: state.rgbMode,
+      rgbStatus: state.rgbStatus,
+      rgbMessage: state.rgbMessage,
+      previewPressed: state.previewPressed,
+    })),
+  );
+  const { setRgbColor, setRgbMode, applyRgb, pressPreview } =
+    useKeypadActions();
   const connected = connectionStatus === "connected";
-  const protocolSupported = profile?.protocol === 0x00 || profile?.protocol === 0x0a;
+  const protocolSupported =
+    profile?.protocol === 0x00 || profile?.protocol === 0x0a;
 
   return (
     <article className="rgbCard" aria-labelledby="rgb-title">
@@ -29,18 +35,42 @@ export function RgbEditor() {
         <p className="eyebrow">LIGHTING CONTROL</p>
         <h3 id="rgb-title">RGB settings</h3>
         <p>
-          Choose one of the seven firmware colors and six documented effects. The preview
-          mirrors the two physical keys before anything is sent to the keypad.
+          Choose one of the seven firmware colors and six documented effects.
+          The preview mirrors the two physical keys before anything is sent to
+          the keypad.
         </p>
         <div
           className={`rgbKeyPreview mode${rgbMode} ${previewPressed === 1 ? "pressed1" : ""} ${previewPressed === 2 ? "pressed2" : ""}`}
-          style={{ "--rgb-preview": RGB_COLORS.find((option) => option.value === rgbColor)?.hex } as CSSProperties}
+          style={
+            {
+              "--rgb-preview": RGB_COLORS.find(
+                (option) => option.value === rgbColor,
+              )?.hex,
+            } as CSSProperties
+          }
         >
           <div>
-            <button type="button" onPointerDown={() => pressPreview(1)} aria-label="Preview key 1 lighting"><i /><span>K1</span></button>
-            <button type="button" onPointerDown={() => pressPreview(2)} aria-label="Preview key 2 lighting"><i /><span>K2</span></button>
+            <button
+              type="button"
+              onPointerDown={() => pressPreview(1)}
+              aria-label="Preview key 1 lighting"
+            >
+              <i />
+              <span>K1</span>
+            </button>
+            <button
+              type="button"
+              onPointerDown={() => pressPreview(2)}
+              aria-label="Preview key 2 lighting"
+            >
+              <i />
+              <span>K2</span>
+            </button>
           </div>
-          <p>{RGB_MODES.find((option) => option.value === rgbMode)?.name}{rgbMode === 4 ? " · press a preview key" : ""}</p>
+          <p>
+            {RGB_MODES.find((option) => option.value === rgbMode)?.name}
+            {rgbMode === 4 ? " · press a preview key" : ""}
+          </p>
         </div>
       </div>
 
@@ -56,7 +86,8 @@ export function RgbEditor() {
                 key={option.value}
                 aria-pressed={rgbColor === option.value}
               >
-                <i style={{ backgroundColor: option.hex }} />{option.name}
+                <i style={{ backgroundColor: option.hex }} />
+                {option.name}
               </button>
             ))}
           </div>
@@ -72,7 +103,12 @@ export function RgbEditor() {
                 onClick={() => setRgbMode(mode.value)}
                 key={mode.value}
                 aria-pressed={rgbMode === mode.value}
-              ><span>{mode.name}</span><small>MODE {mode.value} · {mode.detail}</small></button>
+              >
+                <span>{mode.name}</span>
+                <small>
+                  MODE {mode.value} · {mode.detail}
+                </small>
+              </button>
             ))}
           </div>
         </fieldset>
@@ -84,9 +120,20 @@ export function RgbEditor() {
           disabled={!connected || !protocolSupported || rgbStatus === "writing"}
           aria-describedby="rgb-write-status"
         >
-          {rgbStatus === "writing" ? "Applying RGB…" : protocolSupported ? "Apply RGB to keypad" : "RGB unavailable for this firmware"}
+          {rgbStatus === "writing"
+            ? "Applying RGB…"
+            : protocolSupported
+              ? "Apply RGB to keypad"
+              : "RGB unavailable for this firmware"}
         </button>
-        <p className={`rgbStatus ${rgbStatus}`} id="rgb-write-status" role="status" aria-live="polite">{rgbMessage}</p>
+        <p
+          className={`rgbStatus ${rgbStatus}`}
+          id="rgb-write-status"
+          role="status"
+          aria-live="polite"
+        >
+          {rgbMessage}
+        </p>
       </div>
     </article>
   );

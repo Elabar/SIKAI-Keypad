@@ -9,7 +9,9 @@ async function render() {
 
   return worker.fetch(
     new Request("http://localhost/", { headers: { accept: "text/html" } }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    {
+      ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+    },
     { waitUntil() {}, passThroughOnException() {} },
   );
 }
@@ -31,7 +33,10 @@ test("keeps protocol and presentation concerns separated", async () => {
   const [page, store, keypadClass] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../stores/keypad-store.ts", import.meta.url), "utf8"),
-    readFile(new URL("../lib/sikai-keypad/sikai-keypad.ts", import.meta.url), "utf8"),
+    readFile(
+      new URL("../lib/sikai-keypad/sikai-keypad.ts", import.meta.url),
+      "utf8",
+    ),
   ]);
 
   assert.match(page, /<Hero \/>/);
@@ -39,6 +44,8 @@ test("keeps protocol and presentation concerns separated", async () => {
   assert.match(page, /<RgbEditor \/>/);
   assert.doesNotMatch(page, /sendReport|requestDevice|inputreport/);
   assert.match(store, /create<KeypadState>/);
+  assert.match(store, /actions:\s*\{/);
+  assert.match(store, /useKeypadActions/);
   assert.match(store, /connect:\s*async/);
   assert.match(store, /applyAssignments:\s*async/);
   assert.match(store, /applyRgb:\s*async/);
