@@ -118,6 +118,14 @@ dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fon
 .diagnosticStatus { min-height: 38px; color: #d1cfd4; font-size: 12px; line-height: 1.5; margin: 16px 0 0; }
 .diagnosticCard.success .diagnosticStatus { color: var(--acid); }
 .diagnosticCard.error .diagnosticStatus { color: #ff9c96; }
+.decodedKeys { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+.decodedKeys > div { border: 1px solid #ffffff2b; padding: 15px; background: #ffffff08; display: flex; flex-direction: column; gap: 5px; }
+.decodedKeys span, .decodedKeys small { font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .12em; color: #929098; }
+.decodedKeys strong { font-size: 19px; color: var(--acid); }
+.saveLock { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: #85838b; }
+.saveLock > span { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid #65636b; border-radius: 50%; font-weight: 800; }
+.saveLock p { font-size: 10px; line-height: 1.45; margin: 0; }
+.saveLock b { color: #aaa8ae; }
 .packetViewer { min-width: 0; padding: 22px; background: #0e0e12; }
 .packetHeader { display: flex; justify-content: space-between; color: var(--acid); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .12em; padding-bottom: 14px; border-bottom: 1px solid #ffffff20; }
 .packetViewer > p { color: #777780; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 22px 0; }
@@ -148,6 +156,7 @@ footer { max-width: 1280px; margin: auto; min-height: 86px; padding: 0 38px; dis
   .sectionHeading h2 { margin-top: 12px; }
   .resultsSection { padding: 55px 20px; }
   .collectionCard ul { display: grid; gap: 7px; }
+  .decodedKeys { grid-template-columns: 1fr; }
   footer p:last-child { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {

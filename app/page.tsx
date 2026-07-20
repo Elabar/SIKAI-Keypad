@@ -78,6 +78,27 @@ function reportIds(reports: HidReportInfo[] | undefined) {
   return reports.map((report) => report.reportId ?? 0).join(", ");
 }
 
+const KEY_NAMES: Record<number, string> = {
+  0x04: "A", 0x05: "B", 0x06: "C", 0x07: "D", 0x08: "E", 0x09: "F",
+  0x0a: "G", 0x0b: "H", 0x0c: "I", 0x0d: "J", 0x0e: "K", 0x0f: "L",
+  0x10: "M", 0x11: "N", 0x12: "O", 0x13: "P", 0x14: "Q", 0x15: "R",
+  0x16: "S", 0x17: "T", 0x18: "U", 0x19: "V", 0x1a: "W", 0x1b: "X",
+  0x1c: "Y", 0x1d: "Z", 0x1e: "1", 0x1f: "2", 0x20: "3", 0x21: "4",
+  0x22: "5", 0x23: "6", 0x24: "7", 0x25: "8", 0x26: "9", 0x27: "0",
+  0x28: "Enter", 0x29: "Escape", 0x2a: "Backspace", 0x2b: "Tab", 0x2c: "Space",
+};
+
+function decodePacket(packet: string) {
+  const bytes = packet.split(" ").map((value) => Number.parseInt(value, 16));
+  const modifiers = [
+    [0x01, "Ctrl"], [0x02, "Shift"], [0x04, "Alt"], [0x08, "Meta"],
+    [0x10, "Right Ctrl"], [0x20, "Right Shift"], [0x40, "Right Alt"], [0x80, "Right Meta"],
+  ] as const;
+  const parts = modifiers.filter(([mask]) => (bytes[10] & mask) !== 0).map(([, name]) => name);
+  parts.push(KEY_NAMES[bytes[11]] ?? hex(bytes[11], 2));
+  return { slot: bytes[1], actionType: bytes[9], shortcut: parts.join(" + ") };
+}
+
 export default function Home() {
   const [device, setDevice] = useState<KeypadDevice | null>(null);
   const [result, setResult] = useState<ProbeResult | null>(null);
@@ -90,6 +111,10 @@ export default function Home() {
   const supported = useMemo(
     () => typeof navigator !== "undefined" && "hid" in navigator,
     [],
+  );
+  const decodedKeys = useMemo(
+    () => packets.map(decodePacket).filter((record) => record.slot === 1 || record.slot === 2).sort((a, b) => a.slot - b.slot),
+    [packets],
   );
 
   useEffect(() => {
@@ -345,6 +370,18 @@ export default function Home() {
               {packets.length > 0 && <button className="darkButton" onClick={copyPackets}>Copy raw packets</button>}
             </div>
             <p className="diagnosticStatus" aria-live="polite">{readMessage}</p>
+            {decodedKeys.length === 2 && (
+              <div className="decodedKeys" aria-label="Decoded physical key assignments">
+                {decodedKeys.map((record) => (
+                  <div key={record.slot}>
+                    <span>KEY {record.slot}</span>
+                    <strong>{record.shortcut}</strong>
+                    <small>{record.slot === 1 ? "COPY" : "PASTE"} · LAYER 1</small>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="saveLock"><span aria-hidden="true">×</span><p><b>Remapping locked</b><br />No write or flash-save command is enabled yet.</p></div>
           </div>
 
           <div className="packetViewer" aria-label="Raw configuration packets">
@@ -363,7 +400,7 @@ export default function Home() {
       <footer>
         <p>STEP 2 OF 3</p>
         <div className="steps"><i className="active" /><i className="active" /><i /></div>
-        <p>Next: decode the returned key and RGB settings</p>
+        <p>Next: verify a reversible remapping command</p>
       </footer>
     </main>
   );
