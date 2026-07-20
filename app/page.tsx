@@ -77,6 +77,11 @@ type FirmwareProfile = {
   raw: string;
 };
 
+type RgbLayer = {
+  mode: number;
+  colors: Uint8Array;
+};
+
 function hex(value: number | undefined, width = 4) {
   return `0x${(value ?? 0).toString(16).toUpperCase().padStart(width, "0")}`;
 }
@@ -214,6 +219,45 @@ async function requestFirmwareProfile(device: KeypadDevice) {
   });
 }
 
+async function requestRgbLayer(device: KeypadDevice, layer: number) {
+  return new Promise<RgbLayer>((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error, value?: RgbLayer) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      device.removeEventListener("inputreport", handleReport);
+      if (error) reject(error);
+      else if (value) resolve(value);
+    };
+    const handleReport = (event: HidInputReportEvent) => {
+      if (event.reportId !== 3) return;
+      const bytes = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
+      if (bytes.length < 50 || bytes[0] !== 0xb0) return;
+      finish(undefined, { mode: bytes[1], colors: bytes.slice(2, 50) });
+    };
+    const timer = setTimeout(() => finish(new Error(`RGB layer ${layer + 1} did not answer the read request.`)), 2000);
+    device.addEventListener("inputreport", handleReport);
+    const payload = new Uint8Array(64);
+    payload.set([0xfa, 0xb0, layer]);
+    device.sendReport(3, payload).catch((error) => finish(error instanceof Error ? error : new Error("The RGB read request could not be sent.")));
+  });
+}
+
+async function sendReportWithTimeout(device: KeypadDevice, payload: Uint8Array) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      device.sendReport(3, payload),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("The keypad did not finish the RGB write. Reconnect it before trying again.")), 1500);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export default function Home() {
   const [device, setDevice] = useState<KeypadDevice | null>(null);
   const [result, setResult] = useState<ProbeResult | null>(null);
@@ -231,6 +275,8 @@ export default function Home() {
   const [profileStatus, setProfileStatus] = useState<"idle" | "reading" | "success" | "error">("idle");
   const [profile, setProfile] = useState<FirmwareProfile | null>(null);
   const [profileMessage, setProfileMessage] = useState("Run the read-only firmware check to select the correct RGB protocol.");
+  const [rgbStatus, setRgbStatus] = useState<"idle" | "writing" | "success" | "error">("idle");
+  const [rgbMessage, setRgbMessage] = useState("RGB is enabled only after a supported firmware protocol is identified.");
 
   const supported = useMemo(
     () => typeof navigator !== "undefined" && "hid" in navigator,
@@ -301,9 +347,32 @@ export default function Home() {
       setProfileStatus("idle");
       setProfile(null);
       setProfileMessage("Run the read-only firmware check to select the correct RGB protocol.");
+      setRgbStatus("idle");
+      setRgbMessage("Detecting the firmware protocol…");
       setWriteMessage("Read the keypad before editing its assignments.");
       setReadMessage("Ready to request layer 1. This does not save or change the keypad.");
       setMessage("Configuration channel confirmed. Report ID 3 is available in both directions.");
+
+      setProfileStatus("reading");
+      try {
+        const detected = await requestFirmwareProfile(selected);
+        setProfile(detected);
+        setProfileStatus("success");
+        if (detected.protocol === 0x00) {
+          setProfileMessage("Legacy protocol 0x00 detected. The corrected SIKAI RGB record is supported.");
+          setRgbMessage("Legacy RGB support is ready. Apply uses RGB key mode 0x08 and verifies that the keypad remains responsive.");
+        } else if (detected.protocol === 0x0a) {
+          setProfileMessage("Protocol 0x0A detected. SIKAI's three-layer RGB table is supported.");
+          setRgbMessage("RGB table support is ready. Existing colors on every layer are read and preserved before saving.");
+        } else {
+          setProfileMessage(`Protocol ${hex(detected.protocol, 2)} is not supported for RGB writes.`);
+          setRgbMessage("RGB writing is disabled for this firmware. Shortcut configuration remains available.");
+        }
+      } catch (error) {
+        setProfileStatus("error");
+        setProfileMessage(error instanceof Error ? error.message : "The firmware identity could not be read.");
+        setRgbMessage("RGB writing stays disabled until the firmware can be identified.");
+      }
     } catch (error) {
       const detail = error instanceof Error ? error.message : "The browser could not open the device.";
       setStatus("error");
@@ -320,6 +389,8 @@ export default function Home() {
     setProfileStatus("idle");
     setProfile(null);
     setProfileMessage("Run the read-only firmware check to select the correct RGB protocol.");
+    setRgbStatus("idle");
+    setRgbMessage("RGB is enabled only after a supported firmware protocol is identified.");
     setWriteMessage("Read the keypad before editing its assignments.");
     setReadMessage("Connect the confirmed configuration channel to enable this diagnostic.");
     setStatus("idle");
@@ -428,11 +499,77 @@ export default function Home() {
       setProfileMessage(
         detected.protocol === 0x0a
           ? "Protocol 0x0A confirmed: this keypad uses SIKAI's newer three-packet RGB table."
-          : `Protocol ${hex(detected.protocol, 2)} detected. RGB writing remains paused while this variant is matched.`,
+          : detected.protocol === 0x00
+            ? "Legacy protocol 0x00 confirmed: the corrected SIKAI RGB record is supported."
+            : `Protocol ${hex(detected.protocol, 2)} is not supported for RGB writes.`,
+      );
+      setRgbStatus("idle");
+      setRgbMessage(
+        detected.protocol === 0x00
+          ? "Legacy RGB support is ready. Apply uses RGB key mode 0x08 and verifies that the keypad remains responsive."
+          : detected.protocol === 0x0a
+            ? "RGB table support is ready. Existing colors on every layer are read and preserved before saving."
+            : "RGB writing is disabled for this firmware. Shortcut configuration remains available.",
       );
     } catch (error) {
       setProfileStatus("error");
       setProfileMessage(error instanceof Error ? error.message : "The firmware identity could not be read.");
+    }
+  }
+
+  async function applyRgb() {
+    if (!device?.opened || !profile || rgbStatus === "writing") return;
+    if (profile.protocol !== 0x00 && profile.protocol !== 0x0a) return;
+    setRgbStatus("writing");
+    setRgbMessage(profile.protocol === 0x0a ? "Reading and preserving all three RGB layers…" : "Saving the corrected legacy RGB record…");
+
+    try {
+      if (profile.protocol === 0x00) {
+        const payload = new Uint8Array(64);
+        payload.set([0xfe, 0xb0, 0x01, 0x08]);
+        payload[9] = 0x01;
+        payload[11] = rgbColor | rgbMode;
+        await sendReportWithTimeout(device, payload);
+
+        const commit = new Uint8Array(64);
+        commit.set([0xfd, 0xfe, 0xff]);
+        await sendReportWithTimeout(device, commit);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        await requestFirmwareProfile(device);
+      } else {
+        const layers: RgbLayer[] = [];
+        for (let layer = 0; layer < 3; layer += 1) layers.push(await requestRgbLayer(device, layer));
+
+        const selected = RGB_COLORS.find((option) => option.value === rgbColor)?.hex ?? "#35d8e8";
+        const color = [1, 3, 5].map((index) => Number.parseInt(selected.slice(index, index + 2), 16));
+        layers[0].mode = rgbMode;
+        for (let key = 0; key < Math.min(profile.keyCount, 16); key += 1) {
+          layers[0].colors.set(color, key * 3);
+        }
+
+        for (let layer = 0; layer < 3; layer += 1) {
+          const payload = new Uint8Array(64);
+          payload.set([0xfe, 0xb0, layer, layers[layer].mode]);
+          payload.set(layers[layer].colors, 4);
+          await sendReportWithTimeout(device, payload);
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        const verified = await requestRgbLayer(device, 0);
+        const expected = layers[0].colors.slice(0, Math.min(profile.keyCount, 16) * 3);
+        const actual = verified.colors.slice(0, expected.length);
+        if (verified.mode !== rgbMode || !expected.every((byte, index) => byte === actual[index])) {
+          throw new Error("The keypad responded, but its RGB table did not match the requested setting.");
+        }
+      }
+
+      const colorName = RGB_COLORS.find((option) => option.value === rgbColor)?.name ?? "Selected color";
+      const modeName = RGB_MODES.find((option) => option.value === rgbMode)?.name ?? `Mode ${rgbMode}`;
+      setRgbStatus("success");
+      setRgbMessage(`${colorName}, ${modeName} was saved using firmware protocol ${hex(profile.protocol, 2)}. Confirm the visible effect and reconnect once to check persistence.`);
+    } catch (error) {
+      setRgbStatus("error");
+      setRgbMessage(error instanceof Error ? error.message : "The RGB setting could not be saved.");
     }
   }
 
@@ -673,11 +810,17 @@ export default function Home() {
                 <code>{profile.raw}</code>
               </div>
             )}
-            <button className="applyRgbButton" type="button" disabled aria-describedby="rgb-write-status">
-              RGB hardware write paused
+            <button
+              className="applyRgbButton"
+              type="button"
+              onClick={applyRgb}
+              disabled={status !== "connected" || !profile || (profile.protocol !== 0x00 && profile.protocol !== 0x0a) || rgbStatus === "writing"}
+              aria-describedby="rgb-write-status"
+            >
+              {rgbStatus === "writing" ? "Applying RGB…" : profile && (profile.protocol === 0x00 || profile.protocol === 0x0a) ? "Apply RGB to keypad" : "RGB unavailable for this firmware"}
             </button>
-            <p className="rgbStatus error" id="rgb-write-status" role="status">
-              This firmware stalls on the vendor RGB packet we tested. No lighting command will be sent until its model-specific save sequence is verified. Shortcut configuration remains available.
+            <p className={`rgbStatus ${rgbStatus}`} id="rgb-write-status" role="status" aria-live="polite">
+              {rgbMessage}
             </p>
           </div>
         </article>
