@@ -3,6 +3,20 @@
 A browser-based configurator for the SIKAI two-key RGB keypad. It uses WebHID
 to read and update onboard key assignments and supported lighting settings.
 
+Tired of downloading and installing another application just to configure a
+two-key keypad? So was I. Keypad Lab lets you configure it directly from a
+supported browser.
+
+This project was built and tested for the
+[SIKAI two-key Copy/Paste keypad](https://sikaicase.com/products/2-key-copy-paste-keyboard-osu-keypad-hotswap-one-handed-mechanical-gaming-keyboard-backlit-mini-usb-keypad-for-accounting-working-or-rhythm-games-black),
+which is also available from this [Shopee listing](https://my.shp.ee/WcEwghiZ).
+If you purchased the same model, give it a try.
+
+> [!CAUTION]
+> This is an independent, unofficial project. Hardware and firmware revisions
+> may differ even when devices look identical. Use it at your own risk and
+> confirm the vendor and product IDs before applying changes.
+
 ## Requirements
 
 - Windows with a current Chrome or Edge browser
@@ -30,5 +44,5 @@ bun run test
 - `components/` — connection, assignment, RGB, and diagnostic UI
 - `app/` — application shell and styles
 
-The deployed configurator is private and uses `.openai/hosting.json` for its
-Sites project binding.
+The deployed configurator uses `.openai/hosting.json` for its Sites project
+binding.
