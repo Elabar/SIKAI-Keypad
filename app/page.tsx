@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 
 const SIKAI_VENDOR_ID = 0x514c;
 const SIKAI_PRODUCT_ID = 0x8851;
@@ -108,7 +109,14 @@ const RGB_COLORS = [
   { value: 0x60, name: "Blue", hex: "#4c78ff" },
   { value: 0x70, name: "Purple", hex: "#a66bff" },
 ] as const;
-const RGB_MODES = [0, 1, 2, 3, 4, 5] as const;
+const RGB_MODES = [
+  { value: 0, name: "Off", detail: "Close the light" },
+  { value: 1, name: "Steady", detail: "All keys" },
+  { value: 2, name: "Forward glow", detail: "First to last" },
+  { value: 3, name: "Reverse glow", detail: "Last to first" },
+  { value: 4, name: "Press reactive", detail: "Single key" },
+  { value: 5, name: "White steady", detail: "All keys" },
+] as const;
 
 type KeyAssignment = { modifier: number; keyCode: number };
 
@@ -118,6 +126,20 @@ function packetBytes(packet: string) {
 
 function packetForSlot(source: string[], slot: number) {
   return source.find((packet) => packetBytes(packet)[1] === slot);
+}
+
+async function sendReportWithTimeout(device: KeypadDevice, payload: Uint8Array, timeoutMs = 1500) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      device.sendReport(3, payload),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("The RGB command timed out. Reconnect the keypad before trying again.")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function decodePacket(packet: string) {
@@ -184,6 +206,7 @@ export default function Home() {
   const [rgbMode, setRgbMode] = useState(0);
   const [rgbStatus, setRgbStatus] = useState<"idle" | "writing" | "success" | "error">("idle");
   const [rgbMessage, setRgbMessage] = useState("Choose a color and firmware mode, then apply it to the keypad.");
+  const [previewPressed, setPreviewPressed] = useState<number | null>(null);
 
   const supported = useMemo(
     () => typeof navigator !== "undefined" && "hid" in navigator,
@@ -376,20 +399,22 @@ export default function Home() {
       payload[3] = 0x01;
       payload[9] = 0x01;
       payload[11] = rgbColor | rgbMode;
-      await device.sendReport(3, payload);
-
-      const commit = new Uint8Array(64);
-      commit.set([0xfd, 0xfe, 0xff]);
-      await device.sendReport(3, commit);
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await sendReportWithTimeout(device, payload);
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       const color = RGB_COLORS.find((option) => option.value === rgbColor)?.name ?? "selected";
+      const mode = RGB_MODES.find((option) => option.value === rgbMode)?.name ?? `Mode ${rgbMode}`;
       setRgbStatus("success");
-      setRgbMessage(`${color}, Mode ${rgbMode} was saved. Confirm the visible effect on the keypad.`);
+      setRgbMessage(`${color}, ${mode} was sent. Confirm the visible effect and whether it remains after reconnecting.`);
     } catch (error) {
       setRgbStatus("error");
       setRgbMessage(error instanceof Error ? error.message : "The keypad could not save the RGB setting.");
     }
+  }
+
+  function pressPreview(key: number) {
+    setPreviewPressed(key);
+    setTimeout(() => setPreviewPressed(null), 450);
   }
 
   return (
@@ -564,14 +589,19 @@ export default function Home() {
             <p className="eyebrow">LIGHTING CONTROL</p>
             <h3 id="rgb-title">RGB settings</h3>
             <p>
-              Choose one of the seven firmware colors and six built-in effects. The original
-              software names the effects only Mode 0–5, so we will identify their behavior together.
+              Choose one of the seven firmware colors and six documented effects. The preview
+              mirrors the two physical keys before anything is sent to the keypad.
             </p>
             <div
-              className="rgbOrb"
-              style={{ backgroundColor: RGB_COLORS.find((option) => option.value === rgbColor)?.hex, boxShadow: `0 0 70px ${RGB_COLORS.find((option) => option.value === rgbColor)?.hex}` }}
-              aria-hidden="true"
-            />
+              className={`rgbKeyPreview mode${rgbMode} ${previewPressed === 1 ? "pressed1" : ""} ${previewPressed === 2 ? "pressed2" : ""}`}
+              style={{ "--rgb-preview": RGB_COLORS.find((option) => option.value === rgbColor)?.hex } as CSSProperties}
+            >
+              <div>
+                <button type="button" onPointerDown={() => pressPreview(1)} aria-label="Preview key 1 lighting"><i /><span>K1</span></button>
+                <button type="button" onPointerDown={() => pressPreview(2)} aria-label="Preview key 2 lighting"><i /><span>K2</span></button>
+              </div>
+              <p>{RGB_MODES.find((option) => option.value === rgbMode)?.name}{rgbMode === 4 ? " · press a preview key" : ""}</p>
+            </div>
           </div>
 
           <div className="rgbControls">
@@ -598,11 +628,11 @@ export default function Home() {
                 {RGB_MODES.map((mode) => (
                   <button
                     type="button"
-                    className={rgbMode === mode ? "selected" : ""}
-                    onClick={() => { setRgbMode(mode); setRgbStatus("idle"); }}
-                    key={mode}
-                    aria-pressed={rgbMode === mode}
-                  >Mode {mode}</button>
+                    className={rgbMode === mode.value ? "selected" : ""}
+                    onClick={() => { setRgbMode(mode.value); setRgbStatus("idle"); }}
+                    key={mode.value}
+                    aria-pressed={rgbMode === mode.value}
+                  ><span>{mode.name}</span><small>MODE {mode.value} · {mode.detail}</small></button>
                 ))}
               </div>
             </fieldset>
