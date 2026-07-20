@@ -10,15 +10,33 @@ function KeypadIllustration() {
       <div className="glow glowA" />
       <div className="glow glowB" />
       <div className="keypad">
-        <div className="key keyOne">
-          <span>K1</span>
-          <small>MACRO</small>
+        <div className="caseSeam" />
+        <div className="heroKeyAssembly keyOne">
+          <div className="key">
+            <span>Copy</span>
+          </div>
+          <div className="switchLayer">
+            <i />
+            <i />
+            <i />
+          </div>
+          <div className="keySocket" />
         </div>
-        <div className="key keyTwo">
-          <span>K2</span>
-          <small>MACRO</small>
+        <div className="heroKeyAssembly keyTwo">
+          <div className="key">
+            <span>Paste</span>
+          </div>
+          <div className="switchLayer">
+            <i />
+            <i />
+            <i />
+          </div>
+          <div className="keySocket" />
         </div>
-        <div className="port" />
+        <div className="statusLights" aria-hidden="true">
+          <i />
+          <i />
+        </div>
       </div>
       <p>USB-C · ONBOARD MEMORY · RGB</p>
     </div>

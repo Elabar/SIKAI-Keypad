@@ -74,13 +74,20 @@ h1 em::after { content: ""; position: absolute; left: -2%; right: -3%; height: 2
 .glow { position: absolute; width: 180px; height: 180px; filter: blur(60px); opacity: .55; z-index: -2; }
 .glowA { background: var(--violet); left: 13%; top: 29%; }
 .glowB { background: var(--cyan); right: 11%; bottom: 25%; }
-.keypad { position: relative; width: 340px; height: 210px; padding: 29px; display: flex; gap: 17px; background: linear-gradient(145deg,#2d2e35,#121319); border-radius: 24px; transform: perspective(700px) rotateX(53deg) rotateZ(-26deg); box-shadow: -28px 34px 50px #28283244, inset 0 0 0 2px #ffffff17, inset 0 -13px 0 #09090d; }
-.key { position: relative; flex: 1; display: grid; place-content: center; text-align: center; color: #f6f6f7; background: linear-gradient(145deg,#444650,#202128); border-radius: 14px; border: 1px solid #ffffff24; box-shadow: -7px 9px 0 #13141a, 0 0 18px var(--key-glow), inset 0 -7px 9px #0008; }
-.keyOne { --key-glow: var(--violet); border-bottom: 5px solid var(--violet); }
-.keyTwo { --key-glow: var(--cyan); border-bottom: 5px solid var(--cyan); }
-.key span { font-size: 34px; font-weight: 900; letter-spacing: -.05em; }
-.key small { font-size: 8px; letter-spacing: .2em; opacity: .6; }
-.port { position: absolute; right: -5px; width: 8px; height: 42px; top: 84px; background: #07080a; border-radius: 0 4px 4px 0; }
+.keypad { position: relative; width: 312px; height: 292px; padding: 48px 29px 68px; display: flex; gap: 18px; background: linear-gradient(145deg,#3b3c41,#17181d 58%,#0d0e12); border-radius: 22px; transform: perspective(720px) rotateX(55deg) rotateZ(-27deg); box-shadow: -28px 34px 50px #28283244, inset 0 0 0 2px #ffffff1c, inset 0 -18px 0 #09090d; }
+.keypad::after { content: ""; position: absolute; left: 5px; right: 5px; bottom: 43px; height: 7px; border-top: 2px solid #a8aaa488; border-bottom: 1px solid #ffffff26; background: #777a7440; }
+.caseSeam { position: absolute; inset: 9px 8px 17px; border: 1px solid #ffffff12; border-radius: 17px; pointer-events: none; }
+.heroKeyAssembly { --key-glow: var(--violet); position: relative; z-index: 1; flex: 1; height: 164px; display: flex; flex-direction: column; align-items: stretch; }
+.heroKeyAssembly.keyTwo { --key-glow: var(--cyan); }
+.key { position: relative; z-index: 3; height: 106px; display: grid; place-content: center; text-align: center; color: #f6f6f7; background: linear-gradient(145deg,#424349,#1d1e23); clip-path: polygon(12% 0,88% 0,100% 84%,91% 100%,9% 100%,0 84%); border-radius: 10px; box-shadow: 0 0 18px var(--key-glow), inset 0 -10px 12px #0009, inset 0 2px 2px #ffffff20; transform: translateY(-17px); }
+.key span { font-size: 21px; font-weight: 800; letter-spacing: -.035em; transform: translateY(-3px); }
+.switchLayer { position: absolute; z-index: 2; left: 8px; right: 8px; top: 92px; height: 17px; display: flex; align-items: center; justify-content: space-around; padding: 0 8px; background: #d9dadd; border: 3px solid #101116; box-shadow: 0 0 18px var(--key-glow); }
+.switchLayer::before { content: ""; position: absolute; inset: 4px -3px -6px; background: var(--key-glow); opacity: .75; z-index: -1; }
+.switchLayer i { width: 11px; height: 7px; background: #64666d; border: 1px solid #f5f5f677; }
+.keySocket { position: absolute; z-index: 1; left: 11px; right: 11px; top: 107px; height: 46px; background: linear-gradient(145deg,#15161a,#050608); clip-path: polygon(7% 0,93% 0,100% 27%,85% 100%,15% 100%,0 27%); box-shadow: inset 0 3px 4px #ffffff0d; }
+.statusLights { position: absolute; right: 25px; bottom: 24px; display: flex; gap: 8px; z-index: 2; }
+.statusLights i { width: 5px; height: 5px; border-radius: 50%; background: var(--acid); box-shadow: 0 0 7px var(--acid); }
+.statusLights i:last-child { width: 3px; background: #d9d8d2; box-shadow: none; }
 .deviceStage > p { position: absolute; bottom: 28px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; letter-spacing: .14em; color: var(--muted); }
 
 .resultsSection { background: var(--ink); color: #f6f2eb; padding: 76px max(38px, calc((100vw - 1204px) / 2)); min-height: 420px; }
