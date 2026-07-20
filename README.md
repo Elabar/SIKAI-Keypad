@@ -39,7 +39,14 @@ bun run dev
 ```bash
 bun run lint
 bun run test
+bun run build:pages
 ```
+
+## GitHub Pages
+
+Pushes to `main` are validated, built, and deployed to GitHub Pages by
+`.github/workflows/deploy-pages.yml`. In the repository settings, set
+**Settings → Pages → Source** to **GitHub Actions** before the first deployment.
 
 ## Structure
 
